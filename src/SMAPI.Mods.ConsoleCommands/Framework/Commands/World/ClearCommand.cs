@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using StardewValley;
-using StardewValley.Locations;
 using StardewValley.Objects;
 using StardewValley.TerrainFeatures;
 using SObject = StardewValley.Object;
@@ -86,7 +85,7 @@ namespace StardewModdingAPI.Mods.ConsoleCommands.Framework.Commands.World
                         foreach (var pair in location.terrainFeatures.Pairs.ToArray())
                         {
                             TerrainFeature feature = pair.Value;
-                            if (feature is HoeDirt dirt && dirt.crop?.dead == true)
+                            if (feature is HoeDirt dirt && dirt.crop?.dead.Value is true)
                             {
                                 dirt.crop = null;
                                 removed++;
@@ -143,7 +142,7 @@ namespace StardewModdingAPI.Mods.ConsoleCommands.Framework.Commands.World
                             this.RemoveFurniture(location, _ => true)
                             + this.RemoveObjects(location, _ => true)
                             + this.RemoveTerrainFeatures(location, _ => true)
-                            + this.RemoveLargeTerrainFeatures(location, p => everything || p is not Bush bush || bush.isDestroyable(location, p.currentTileLocation))
+                            + this.RemoveLargeTerrainFeatures(location, p => everything || p is not Bush bush || bush.isDestroyable())
                             + this.RemoveResourceClumps(location, _ => true);
                         monitor.Log($"Done! Removed {removed} entities from {location.Name}.", LogLevel.Info);
                         break;
@@ -231,15 +230,6 @@ namespace StardewModdingAPI.Mods.ConsoleCommands.Framework.Commands.World
             {
                 location.resourceClumps.Remove(clump);
                 removed++;
-            }
-
-            if (location is Woods woods)
-            {
-                foreach (ResourceClump clump in woods.stumps.Where(shouldRemove).ToArray())
-                {
-                    woods.stumps.Remove(clump);
-                    removed++;
-                }
             }
 
             return removed;

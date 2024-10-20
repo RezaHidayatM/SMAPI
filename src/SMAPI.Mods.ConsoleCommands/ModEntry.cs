@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using StardewModdingAPI.Events;
 using StardewModdingAPI.Mods.ConsoleCommands.Framework.Commands;
 
 namespace StardewModdingAPI.Mods.ConsoleCommands
@@ -18,9 +17,6 @@ namespace StardewModdingAPI.Mods.ConsoleCommands
         /// <summary>The commands which may need to handle update ticks.</summary>
         private IConsoleCommand[] UpdateHandlers = null!;
 
-        /// <summary>The commands which may need to handle input.</summary>
-        private IConsoleCommand[] InputHandlers = null!;
-
 
         /*********
         ** Public methods
@@ -35,27 +31,16 @@ namespace StardewModdingAPI.Mods.ConsoleCommands
                 helper.ConsoleCommands.Add(command.Name, command.Description, (name, args) => this.HandleCommand(command, name, args));
 
             // cache commands
-            this.InputHandlers = this.Commands.Where(p => p.MayNeedInput).ToArray();
             this.UpdateHandlers = this.Commands.Where(p => p.MayNeedUpdate).ToArray();
 
             // hook events
             helper.Events.GameLoop.UpdateTicked += this.OnUpdateTicked;
-            helper.Events.Input.ButtonPressed += this.OnButtonPressed;
         }
 
 
         /*********
         ** Private methods
         *********/
-        /// <summary>The method invoked when a button is pressed.</summary>
-        /// <param name="sender">The event sender.</param>
-        /// <param name="e">The event arguments.</param>
-        private void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
-        {
-            foreach (IConsoleCommand command in this.InputHandlers)
-                command.OnButtonPressed(this.Monitor, e.Button);
-        }
-
         /// <summary>The method invoked when the game updates its state.</summary>
         /// <param name="sender">The event sender.</param>
         /// <param name="e">The event arguments.</param>

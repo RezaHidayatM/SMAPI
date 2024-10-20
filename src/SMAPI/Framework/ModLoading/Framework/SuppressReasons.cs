@@ -8,5 +8,8 @@ namespace StardewModdingAPI.Framework.ModLoading.Framework
 
         /// <summary>A message indicating the code is used via assembly rewriting.</summary>
         public const string UsedViaRewriting = "This code is used via assembly rewriting.";
+
+        /// <summary>A message indicating the code is used via assembly rewriting.</summary>
+        public const string BaseForClarity = "This code deliberately uses 'base' to ensure we're calling the real method instead of a rewritten one.";
     }
 }

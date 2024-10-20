@@ -22,7 +22,9 @@ namespace StardewModdingAPI.Framework.Models
             [nameof(GitHubProjectName)] = "Pathoschild/SMAPI",
             [nameof(WebApiBaseUrl)] = "https://smapi.io/api/",
             [nameof(LogNetworkTraffic)] = false,
+            [nameof(LogTechnicalDetailsForBrokenMods)] = false,
             [nameof(RewriteMods)] = true,
+            [nameof(FixHarmony)] = true,
             [nameof(UseCaseInsensitivePaths)] = Constants.Platform is Platform.Android or Platform.Linux,
             [nameof(SuppressHarmonyDebugMode)] = true
         };
@@ -31,7 +33,6 @@ namespace StardewModdingAPI.Framework.Models
         private static readonly HashSet<string> DefaultSuppressUpdateChecks = new(StringComparer.OrdinalIgnoreCase)
         {
             "SMAPI.ConsoleCommands",
-            "SMAPI.ErrorHandler",
             "SMAPI.SaveBackup"
         };
 
@@ -71,11 +72,17 @@ namespace StardewModdingAPI.Framework.Models
         /// <summary>Whether SMAPI should rewrite mods for compatibility.</summary>
         public bool RewriteMods { get; set; }
 
+        /// <summary>Whether to apply fixes to Harmony so it works with Stardew Valley.</summary>
+        public bool FixHarmony { get; set; }
+
         /// <summary>Whether to make SMAPI file APIs case-insensitive, even on Linux.</summary>
         public bool UseCaseInsensitivePaths { get; set; }
 
         /// <summary>Whether SMAPI should log network traffic. Best combined with <see cref="VerboseLogging"/>, which includes network metadata.</summary>
         public bool LogNetworkTraffic { get; set; }
+
+        /// <summary>Whether to include more technical details about broken mods in the TRACE logs. This is mainly useful for creating compatibility rewriters.</summary>
+        public bool LogTechnicalDetailsForBrokenMods { get; set; }
 
         /// <summary>The colors to use for text written to the SMAPI console.</summary>
         public ColorSchemeConfig ConsoleColors { get; set; }
@@ -106,14 +113,16 @@ namespace StardewModdingAPI.Framework.Models
         /// <param name="webApiBaseUrl"><inheritdoc cref="WebApiBaseUrl" path="/summary" /></param>
         /// <param name="verboseLogging"><inheritdoc cref="VerboseLogging" path="/summary" /></param>
         /// <param name="rewriteMods"><inheritdoc cref="RewriteMods" path="/summary" /></param>
+        /// <param name="fixHarmony"><inheritdoc cref="FixHarmony" path="/summary" /></param>
         /// <param name="useCaseInsensitivePaths"><inheritdoc cref="UseCaseInsensitivePaths" path="/summary" /></param>
         /// <param name="logNetworkTraffic"><inheritdoc cref="LogNetworkTraffic" path="/summary" /></param>
+        /// <param name="logTechnicalDetailsForBrokenMods"><inheritdoc cref="LogTechnicalDetailsForBrokenMods" path="/summary" /></param>
         /// <param name="consoleColors"><inheritdoc cref="ConsoleColors" path="/summary" /></param>
         /// <param name="suppressHarmonyDebugMode"><inheritdoc cref="SuppressHarmonyDebugMode" path="/summary" /></param>
         /// <param name="suppressUpdateChecks"><inheritdoc cref="SuppressUpdateChecks" path="/summary" /></param>
         /// <param name="modsToLoadEarly"><inheritdoc cref="ModsToLoadEarly" path="/summary" /></param>
         /// <param name="modsToLoadLate"><inheritdoc cref="ModsToLoadLate" path="/summary" /></param>
-        public SConfig(bool developerMode, bool? checkForUpdates, bool? listenForConsoleInput, bool? paranoidWarnings, bool? useBetaChannel, string gitHubProjectName, string webApiBaseUrl, string[]? verboseLogging, bool? rewriteMods, bool? useCaseInsensitivePaths, bool? logNetworkTraffic, ColorSchemeConfig consoleColors, bool? suppressHarmonyDebugMode, string[]? suppressUpdateChecks, string[]? modsToLoadEarly, string[]? modsToLoadLate)
+        public SConfig(bool developerMode, bool? checkForUpdates, bool? listenForConsoleInput, bool? paranoidWarnings, bool? useBetaChannel, string gitHubProjectName, string webApiBaseUrl, string[]? verboseLogging, bool? rewriteMods, bool? fixHarmony, bool? useCaseInsensitivePaths, bool? logNetworkTraffic, bool? logTechnicalDetailsForBrokenMods, ColorSchemeConfig consoleColors, bool? suppressHarmonyDebugMode, string[]? suppressUpdateChecks, string[]? modsToLoadEarly, string[]? modsToLoadLate)
         {
             this.DeveloperMode = developerMode;
             this.CheckForUpdates = checkForUpdates ?? (bool)SConfig.DefaultValues[nameof(this.CheckForUpdates)];
@@ -124,8 +133,10 @@ namespace StardewModdingAPI.Framework.Models
             this.WebApiBaseUrl = webApiBaseUrl;
             this.VerboseLogging = new HashSet<string>(verboseLogging ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
             this.RewriteMods = rewriteMods ?? (bool)SConfig.DefaultValues[nameof(this.RewriteMods)];
+            this.FixHarmony = fixHarmony ?? (bool)SConfig.DefaultValues[nameof(this.FixHarmony)];
             this.UseCaseInsensitivePaths = useCaseInsensitivePaths ?? (bool)SConfig.DefaultValues[nameof(this.UseCaseInsensitivePaths)];
             this.LogNetworkTraffic = logNetworkTraffic ?? (bool)SConfig.DefaultValues[nameof(this.LogNetworkTraffic)];
+            this.LogTechnicalDetailsForBrokenMods = logTechnicalDetailsForBrokenMods ?? (bool)SConfig.DefaultValues[nameof(this.LogTechnicalDetailsForBrokenMods)];
             this.ConsoleColors = consoleColors;
             this.SuppressHarmonyDebugMode = suppressHarmonyDebugMode ?? (bool)SConfig.DefaultValues[nameof(this.SuppressHarmonyDebugMode)];
             this.SuppressUpdateChecks = new HashSet<string>(suppressUpdateChecks ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);

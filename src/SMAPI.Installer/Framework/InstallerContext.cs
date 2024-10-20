@@ -48,13 +48,6 @@ namespace StardewModdingAPI.Installer.Framework
             return new SemanticVersion(raw);
         }
 
-        /// <summary>Get whether a folder seems to contain the game files.</summary>
-        /// <param name="dir">The folder to check.</param>
-        public bool LooksLikeGameFolder(DirectoryInfo dir)
-        {
-            return this.GameScanner.LooksLikeGameFolder(dir);
-        }
-
         /// <summary>Get whether a folder seems to contain the game, and which version it contains if so.</summary>
         /// <param name="dir">The folder to check.</param>
         public GameFolderType GetGameFolderType(DirectoryInfo dir)

@@ -50,7 +50,7 @@ namespace StardewModdingAPI.Toolkit.Utilities
         /// <summary>Normalize an asset name to match how MonoGame's content APIs would normalize and cache it.</summary>
         /// <param name="assetName">The asset name to normalize.</param>
         [Pure]
-#if NET5_0_OR_GREATER
+#if NET6_0_OR_GREATER
         [return: NotNullIfNotNull("assetName")]
 #endif
         public static string? NormalizeAssetName(string? assetName)
@@ -66,7 +66,7 @@ namespace StardewModdingAPI.Toolkit.Utilities
         /// <param name="path">The file path to normalize.</param>
         /// <remarks>This should only be used for file paths. For asset names, use <see cref="NormalizeAssetName"/> instead.</remarks>
         [Pure]
-#if NET5_0_OR_GREATER
+#if NET6_0_OR_GREATER
         [return: NotNullIfNotNull("path")]
 #endif
         public static string? NormalizePath(string? path)
@@ -99,13 +99,32 @@ namespace StardewModdingAPI.Toolkit.Utilities
             return newPath;
         }
 
+        /// <summary>Get a path with the home directory path replaced with <c>~</c> (like <c>C:\Users\Admin\Game</c> to <c>~\Game</c>), if applicable.</summary>
+        /// <param name="path">The path to anonymize.</param>
+        [Pure]
+        public static string AnonymizePathForDisplay(string path)
+        {
+            string? homePath = PathUtilities.NormalizePath(Environment.GetEnvironmentVariable("HOME") ?? Environment.GetEnvironmentVariable("USERPROFILE"));
+            path = PathUtilities.NormalizePath(path);
+
+            if (homePath != null)
+            {
+                if (path.Equals(homePath, StringComparison.OrdinalIgnoreCase))
+                    path = homePath;
+                else if (path.StartsWith(homePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    path = "~" + path.Substring(homePath.Length);
+            }
+
+            return path;
+        }
+
         /// <summary>Get a directory or file path relative to a given source path. If no relative path is possible (e.g. the paths are on different drives), an absolute path is returned.</summary>
         /// <param name="sourceDir">The source folder path.</param>
         /// <param name="targetPath">The target folder or file path.</param>
         [Pure]
         public static string GetRelativePath(string sourceDir, string targetPath)
         {
-#if NET5_0
+#if NET6_0_OR_GREATER
             return Path.GetRelativePath(sourceDir, targetPath);
 #else
             // NOTE:

@@ -2,19 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Galaxy.Api;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using StardewModdingAPI.Events;
 using StardewModdingAPI.Framework.Events;
 using StardewModdingAPI.Framework.Networking;
-using StardewModdingAPI.Framework.Reflection;
 using StardewModdingAPI.Internal;
 using StardewModdingAPI.Toolkit.Serialization;
 using StardewModdingAPI.Utilities;
 using StardewValley;
 using StardewValley.Network;
-using StardewValley.SDKs;
 
 namespace StardewModdingAPI.Framework
 {
@@ -43,9 +40,6 @@ namespace StardewModdingAPI.Framework
 
         /// <summary>Encapsulates SMAPI's JSON file parsing.</summary>
         private readonly JsonHelper JsonHelper;
-
-        /// <summary>Simplifies access to private code.</summary>
-        private readonly Reflector Reflection;
 
         /// <summary>Manages SMAPI events.</summary>
         private readonly EventManager EventManager;
@@ -85,16 +79,14 @@ namespace StardewModdingAPI.Framework
         /// <param name="eventManager">Manages SMAPI events.</param>
         /// <param name="jsonHelper">Encapsulates SMAPI's JSON file parsing.</param>
         /// <param name="modRegistry">Tracks the installed mods.</param>
-        /// <param name="reflection">Simplifies access to private code.</param>
         /// <param name="onModMessageReceived">A callback to invoke when a mod message is received.</param>
         /// <param name="logNetworkTraffic">Whether to log network traffic.</param>
-        public SMultiplayer(IMonitor monitor, EventManager eventManager, JsonHelper jsonHelper, ModRegistry modRegistry, Reflector reflection, Action<ModMessageModel> onModMessageReceived, bool logNetworkTraffic)
+        public SMultiplayer(IMonitor monitor, EventManager eventManager, JsonHelper jsonHelper, ModRegistry modRegistry, Action<ModMessageModel> onModMessageReceived, bool logNetworkTraffic)
         {
             this.Monitor = monitor;
             this.EventManager = eventManager;
             this.JsonHelper = jsonHelper;
             this.ModRegistry = modRegistry;
-            this.Reflection = reflection;
             this.OnModMessageReceived = onModMessageReceived;
             this.LogNetworkTraffic = logNetworkTraffic;
         }
@@ -110,48 +102,31 @@ namespace StardewModdingAPI.Framework
         /// <param name="client">The client to initialize.</param>
         public override Client InitClient(Client client)
         {
-            switch (client)
+            client = base.InitClient(client);
+
+            if (client is IHookableClient hookClient)
             {
-                case LidgrenClient:
-                    {
-                        string address = this.Reflection.GetField<string?>(client, "address").GetValue() ?? throw new InvalidOperationException("Can't initialize base networking client: no valid address found.");
-                        return new SLidgrenClient(address, this.OnClientProcessingMessage, this.OnClientSendingMessage);
-                    }
-
-                case GalaxyNetClient:
-                    {
-                        GalaxyID address = this.Reflection.GetField<GalaxyID?>(client, "lobbyId").GetValue() ?? throw new InvalidOperationException("Can't initialize GOG networking client: no valid address found.");
-                        return new SGalaxyNetClient(address, this.OnClientProcessingMessage, this.OnClientSendingMessage);
-                    }
-
-                default:
-                    this.Monitor.Log($"Unknown multiplayer client type: {client.GetType().AssemblyQualifiedName}");
-                    return client;
+                hookClient.OnProcessingMessage = this.OnClientProcessingMessage;
+                hookClient.OnSendingMessage = this.OnClientSendingMessage;
             }
+            else
+                this.Monitor.Log($"Multiplayer client type '{client.GetType().AssemblyQualifiedName}' doesn't implement {nameof(IHookableClient)}, so SMAPI is unable to hook into it. This may cause mod issues in multiplayer.");
+
+            return client;
         }
 
         /// <summary>Initialize a server before the game connects to an incoming player.</summary>
         /// <param name="server">The server to initialize.</param>
         public override Server InitServer(Server server)
         {
-            switch (server)
-            {
-                case LidgrenServer:
-                    {
-                        IGameServer gameServer = this.Reflection.GetField<IGameServer?>(server, "gameServer").GetValue() ?? throw new InvalidOperationException("Can't initialize base networking client: the required 'gameServer' field wasn't found.");
-                        return new SLidgrenServer(gameServer, this, this.OnServerProcessingMessage);
-                    }
+            server = base.InitServer(server);
 
-                case GalaxyNetServer:
-                    {
-                        IGameServer gameServer = this.Reflection.GetField<IGameServer?>(server, "gameServer").GetValue() ?? throw new InvalidOperationException("Can't initialize GOG networking client: the required 'gameServer' field wasn't found.");
-                        return new SGalaxyNetServer(gameServer, this, this.OnServerProcessingMessage);
-                    }
+            if (server is IHookableServer hookServer)
+                hookServer.OnProcessingMessage = this.OnServerProcessingMessage;
+            else
+                this.Monitor.Log($"Multiplayer server type '{server.GetType().AssemblyQualifiedName}' doesn't implement {nameof(IHookableServer)}, so SMAPI is unable to hook into it. This may cause mod issues in multiplayer.");
 
-                default:
-                    this.Monitor.Log($"Unknown multiplayer server type: {server.GetType().AssemblyQualifiedName}");
-                    return server;
-            }
+            return server;
         }
 
         /// <summary>A callback raised when sending a message as a farmhand.</summary>

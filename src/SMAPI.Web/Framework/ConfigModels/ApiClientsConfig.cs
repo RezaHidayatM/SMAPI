@@ -45,8 +45,14 @@ namespace StardewModdingAPI.Web.Framework.ConfigModels
         /// <summary>The base URL for the CurseForge API.</summary>
         public string CurseForgeBaseUrl { get; set; } = null!;
 
+        /// <summary>The base URL for the CurseForge export API.</summary>
+        public string CurseForgeExportUrl { get; set; } = null!;
+
         /// <summary>The API authentication key for the CurseForge API.</summary>
         public string CurseForgeApiKey { get; set; } = null!;
+
+        /// <summary>The URL for a mod page on the CurseForge mod site, where {0} is the mod ID.</summary>
+        public string CurseForgeWebPageUrl { get; set; } = null!;
 
 
         /****
@@ -74,12 +80,18 @@ namespace StardewModdingAPI.Web.Framework.ConfigModels
         /// <summary>The URL for a ModDrop mod page for the user, where {0} is the mod ID.</summary>
         public string ModDropModPageUrl { get; set; } = null!;
 
+        /// <summary>The base URL for the ModDrop export API.</summary>
+        public string ModDropExportUrl { get; set; } = null!;
+
 
         /****
         ** Nexus Mods
         ****/
-        /// <summary>The base URL for the Nexus Mods API.</summary>
+        /// <summary>The base URL for the Nexus Mods REST API.</summary>
         public string NexusBaseUrl { get; set; } = null!;
+
+        /// <summary>The base URL for the Nexus Mods export API.</summary>
+        public string NexusExportUrl { get; set; } = null!;
 
         /// <summary>The URL for a Nexus mod page for the user, excluding the <see cref="NexusBaseUrl"/>, where {0} is the mod ID.</summary>
         public string NexusModUrlFormat { get; set; } = null!;

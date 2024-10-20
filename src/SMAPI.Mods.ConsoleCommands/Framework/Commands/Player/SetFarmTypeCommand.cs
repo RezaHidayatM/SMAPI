@@ -73,8 +73,8 @@ namespace StardewModdingAPI.Mods.ConsoleCommands.Framework.Commands.Player
                 if (customTypes.Any())
                 {
                     result.AppendLine("Or one of these custom farm types:");
-                    foreach (var type in customTypes.Values.OrderBy(p => p.ID))
-                        result.AppendLine($"   - {type.ID} ({this.GetCustomName(type)})");
+                    foreach (var type in customTypes.Values.OrderBy(p => p.Id))
+                        result.AppendLine($"   - {type.Id} ({this.GetCustomName(type)})");
                 }
                 else
                     result.AppendLine("Or a custom farm type (though none is loaded currently).");
@@ -104,7 +104,7 @@ namespace StardewModdingAPI.Mods.ConsoleCommands.Framework.Commands.Player
         /// <param name="monitor">Writes messages to the console and log file.</param>
         private void HandleCustomFarmType(string id, IMonitor monitor)
         {
-            if (Game1.whichModFarm?.ID == id)
+            if (Game1.whichModFarm?.Id == id)
             {
                 monitor.Log($"Your current farm is already set to {id} ({this.GetCustomName(Game1.whichModFarm)}).", LogLevel.Info);
                 return;
@@ -200,9 +200,9 @@ namespace StardewModdingAPI.Mods.ConsoleCommands.Framework.Commands.Player
         private string? GetCustomName(ModFarmType? farmType)
         {
             if (string.IsNullOrWhiteSpace(farmType?.TooltipStringPath))
-                return farmType?.ID;
+                return farmType?.Id;
 
-            return Game1.content.LoadString(farmType.TooltipStringPath)?.Split('_')[0] ?? farmType.ID;
+            return Game1.content.LoadString(farmType.TooltipStringPath)?.Split('_')[0] ?? farmType.Id;
         }
 
         /// <summary>Get the available custom farm types by ID.</summary>
@@ -210,12 +210,12 @@ namespace StardewModdingAPI.Mods.ConsoleCommands.Framework.Commands.Player
         {
             IDictionary<string, ModFarmType> farmTypes = new Dictionary<string, ModFarmType>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (ModFarmType farmType in Game1.content.Load<List<ModFarmType>>("Data\\AdditionalFarms"))
+            foreach (ModFarmType farmType in DataLoader.AdditionalFarms(Game1.content))
             {
-                if (string.IsNullOrWhiteSpace(farmType.ID))
+                if (string.IsNullOrWhiteSpace(farmType.Id))
                     continue;
 
-                farmTypes[farmType.ID] = farmType;
+                farmTypes[farmType.Id] = farmType;
             }
 
             return farmTypes;

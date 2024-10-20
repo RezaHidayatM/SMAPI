@@ -59,30 +59,42 @@ namespace StardewModdingAPI.Web.Framework
 
         /// <summary>Parse version info for the given mod page info.</summary>
         /// <param name="page">The mod page info.</param>
-        /// <param name="subkey">The optional update subkey to match in available files. (If no file names or descriptions contain the subkey, it'll be ignored.)</param>
+        /// <param name="updateKey">The update key to match in available files.</param>
         /// <param name="mapRemoteVersions">The changes to apply to remote versions for update checks.</param>
         /// <param name="allowNonStandardVersions">Whether to allow non-standard versions.</param>
-        public ModInfoModel GetPageVersions(IModPage page, string? subkey, bool allowNonStandardVersions, ChangeDescriptor? mapRemoteVersions)
+        public ModInfoModel GetPageVersions(IModPage page, UpdateKey updateKey, bool allowNonStandardVersions, ChangeDescriptor? mapRemoteVersions)
         {
-            // get base model
+            // get ID to show in errors
+            string displayId = page.RequireSubkey
+                ? page.Id + updateKey.Subkey
+                : page.Id;
+
+            // validate
             ModInfoModel model = new();
-            if (page.IsValid)
+            if (!page.IsValid)
+                return model.SetError(page.Status, page.Error);
+            if (page.RequireSubkey && updateKey.Subkey is null)
+                return model.SetError(RemoteModStatus.RequiredSubkeyMissing, $"The {page.Site} mod with ID '{displayId}' requires an update subkey indicating which mod to fetch.");
+
+            // add basic info (unless it's a manifest, in which case the 'mod page' is the JSON file)
+            if (updateKey.Site != ModSiteKey.UpdateManifest)
                 model.SetBasicInfo(page.Name, page.Url);
-            else
-            {
-                model.SetError(page.Status, page.Error);
-                return model;
-            }
 
             // fetch versions
-            bool hasVersions = this.TryGetLatestVersions(page, subkey, allowNonStandardVersions, mapRemoteVersions, out ISemanticVersion? mainVersion, out ISemanticVersion? previewVersion);
-            if (!hasVersions && subkey != null)
-                hasVersions = this.TryGetLatestVersions(page, null, allowNonStandardVersions, mapRemoteVersions, out mainVersion, out previewVersion);
+            bool hasVersions = this.TryGetLatestVersions(page, updateKey.Subkey, allowNonStandardVersions, mapRemoteVersions, out ISemanticVersion? mainVersion, out ISemanticVersion? previewVersion, out string? mainModPageUrl, out string? previewModPageUrl);
             if (!hasVersions)
-                return model.SetError(RemoteModStatus.InvalidData, $"The {page.Site} mod with ID '{page.Id}' has no valid versions.");
+                return model.SetError(RemoteModStatus.InvalidData, $"The {page.Site} mod with ID '{displayId}' has no valid versions.");
+
+            // apply mod page info
+            model.SetBasicInfo(
+                name: page.GetName(updateKey.Subkey) ?? page.Name,
+                url: page.GetUrl(updateKey.Subkey) ?? page.Url
+            );
 
             // return info
-            return model.SetVersions(mainVersion!, previewVersion);
+            return model
+                .SetMainVersion(mainVersion!, mainModPageUrl)
+                .SetPreviewVersion(previewVersion, previewModPageUrl);
         }
 
         /// <summary>Get a semantic local version for update checks.</summary>
@@ -113,34 +125,37 @@ namespace StardewModdingAPI.Web.Framework
         /// <param name="mapRemoteVersions">The changes to apply to remote versions for update checks.</param>
         /// <param name="main">The main mod version.</param>
         /// <param name="preview">The latest prerelease version, if newer than <paramref name="main"/>.</param>
-        private bool TryGetLatestVersions(IModPage? mod, string? subkey, bool allowNonStandardVersions, ChangeDescriptor? mapRemoteVersions, [NotNullWhen(true)] out ISemanticVersion? main, out ISemanticVersion? preview)
+        /// <param name="mainModPageUrl">The mod page URL from which <paramref name="main"/> can be downloaded, if different from the <see cref="mod"/>'s URL.</param>
+        /// <param name="previewModPageUrl">The mod page URL from which <paramref name="preview"/> can be downloaded, if different from the <see cref="mod"/>'s URL.</param>
+        private bool TryGetLatestVersions(IModPage? mod, string? subkey, bool allowNonStandardVersions, ChangeDescriptor? mapRemoteVersions, [NotNullWhen(true)] out ISemanticVersion? main, out ISemanticVersion? preview, out string? mainModPageUrl, out string? previewModPageUrl)
         {
             main = null;
             preview = null;
+            mainModPageUrl = null;
+            previewModPageUrl = null;
+            if (mod is null)
+                return false;
 
             // parse all versions from the mod page
-            IEnumerable<(string? name, string? description, ISemanticVersion? version)> GetAllVersions()
+            IEnumerable<(IModDownload? download, ISemanticVersion? version)> GetAllVersions()
             {
-                if (mod != null)
+                ISemanticVersion? ParseAndMapVersion(string? raw)
                 {
-                    ISemanticVersion? ParseAndMapVersion(string? raw)
-                    {
-                        raw = this.NormalizeVersion(raw);
-                        return this.GetMappedVersion(raw, mapRemoteVersions, allowNonStandardVersions);
-                    }
+                    raw = this.NormalizeVersion(raw);
+                    return this.GetMappedVersion(raw, mapRemoteVersions, allowNonStandardVersions);
+                }
 
-                    // get mod version
-                    ISemanticVersion? modVersion = ParseAndMapVersion(mod.Version);
-                    if (modVersion != null)
-                        yield return (name: null, description: null, version: ParseAndMapVersion(mod.Version));
+                // get mod version
+                ISemanticVersion? modVersion = ParseAndMapVersion(mod.Version);
+                if (modVersion != null)
+                    yield return (download: null, version: modVersion);
 
-                    // get file versions
-                    foreach (IModDownload download in mod.Downloads)
-                    {
-                        ISemanticVersion? cur = ParseAndMapVersion(download.Version);
-                        if (cur != null)
-                            yield return (download.Name, download.Description, cur);
-                    }
+                // get file versions
+                foreach (IModDownload download in mod.Downloads)
+                {
+                    ISemanticVersion? cur = ParseAndMapVersion(download.Version);
+                    if (cur != null)
+                        yield return (download, cur);
                 }
             }
             var versions = GetAllVersions()
@@ -148,40 +163,59 @@ namespace StardewModdingAPI.Web.Framework
                 .ToArray();
 
             // get main + preview versions
-            void TryGetVersions([NotNullWhen(true)] out ISemanticVersion? mainVersion, out ISemanticVersion? previewVersion, Func<(string? name, string? description, ISemanticVersion? version), bool>? filter = null)
+            void TryGetVersions([NotNullWhen(true)] out ISemanticVersion? mainVersion, out ISemanticVersion? previewVersion, out string? mainUrl, out string? previewUrl, Func<(IModDownload? download, ISemanticVersion? version), bool>? filter = null)
             {
                 mainVersion = null;
                 previewVersion = null;
+                mainUrl = null;
+                previewUrl = null;
 
                 // get latest main + preview version
-                foreach ((string? name, string? description, ISemanticVersion? version) entry in versions)
+                foreach ((IModDownload? download, ISemanticVersion? version) entry in versions)
                 {
                     if (entry.version is null || filter?.Invoke(entry) == false)
                         continue;
 
                     if (entry.version.IsPrerelease())
-                        previewVersion ??= entry.version;
+                    {
+                        if (previewVersion is null)
+                        {
+                            previewVersion = entry.version;
+                            previewUrl = entry.download?.ModPageUrl;
+                        }
+                    }
                     else
-                        mainVersion ??= entry.version;
-
-                    if (mainVersion != null)
+                    {
+                        mainVersion = entry.version;
+                        mainUrl = entry.download?.ModPageUrl;
                         break; // any others will be older since entries are sorted by version
+                    }
                 }
 
                 // normalize values
                 if (previewVersion is not null)
                 {
-                    mainVersion ??= previewVersion; // if every version is prerelease, latest one is the main version
+                    if (mainVersion is null)
+                    {
+                        // if every version is prerelease, latest one is the main version
+                        mainVersion = previewVersion;
+                        mainUrl = previewUrl;
+                    }
                     if (!previewVersion.IsNewerThan(mainVersion))
+                    {
                         previewVersion = null;
+                        previewUrl = null;
+                    }
                 }
             }
 
+            // get versions for subkey
             if (subkey is not null)
-                TryGetVersions(out main, out preview, entry => entry.name?.Contains(subkey, StringComparison.OrdinalIgnoreCase) == true || entry.description?.Contains(subkey, StringComparison.OrdinalIgnoreCase) == true);
-            if (main is null)
-                TryGetVersions(out main, out preview);
+                TryGetVersions(out main, out preview, out mainModPageUrl, out previewModPageUrl, filter: entry => entry.download?.MatchesSubkey(subkey) == true);
 
+            // fallback to non-subkey versions
+            if (main is null && !mod.RequireSubkey)
+                TryGetVersions(out main, out preview, out mainModPageUrl, out previewModPageUrl);
             return main != null;
         }
 

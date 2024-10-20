@@ -28,6 +28,9 @@ namespace StardewModdingAPI.Toolkit.Framework.ModData
         /// <summary>The mod warnings to suppress, even if they'd normally be shown.</summary>
         public ModWarning SuppressWarnings { get; }
 
+        /// <summary>Whether to ignore dependencies on this mod ID when it's not loaded.</summary>
+        public bool IgnoreDependencies { get; set; }
+
         /// <summary>This field stores properties that aren't mapped to another field before they're parsed into <see cref="Fields"/>.</summary>
         [JsonExtensionData]
         public IDictionary<string, JToken> ExtensionData { get; } = new Dictionary<string, JToken>();
@@ -54,11 +57,13 @@ namespace StardewModdingAPI.Toolkit.Framework.ModData
         /// <param name="id">The mod's current unique ID.</param>
         /// <param name="formerIds">The former mod IDs (if any).</param>
         /// <param name="suppressWarnings">The mod warnings to suppress, even if they'd normally be shown.</param>
-        public ModDataModel(string id, string? formerIds, ModWarning suppressWarnings)
+        /// <param name="ignoreDependencies">Whether to ignore dependencies on this mod ID when it's not loaded.</param>
+        public ModDataModel(string id, string? formerIds, ModWarning suppressWarnings, bool ignoreDependencies)
         {
             this.ID = id;
             this.FormerIDs = formerIds;
             this.SuppressWarnings = suppressWarnings;
+            this.IgnoreDependencies = ignoreDependencies;
         }
 
         /// <summary>Get a parsed representation of the <see cref="Fields"/>.</summary>

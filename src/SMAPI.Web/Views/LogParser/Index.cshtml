@@ -15,10 +15,12 @@
 
     // detect suggested fixes
     LogModInfo[] outdatedMods = log?.Mods.Where(mod => mod.HasUpdate).ToArray() ?? Array.Empty<LogModInfo>();
+    bool isPyTkCompatibilityMode = log?.ApiVersionParsed?.IsBetween("3.15.0", "3.19.0") is true && log.Mods.Any(p => p.IsCodeMod && p.Name == "PyTK" && p.GetParsedVersion()?.IsOlderThan("1.24.0") is true);
+
     LogModInfo? errorHandler = log?.Mods.FirstOrDefault(p => p.IsCodeMod && p.Name == "Error Handler");
-    bool missingErrorHandler = errorHandler is null && log?.OperatingSystem?.Contains("Android Unix", StringComparison.OrdinalIgnoreCase) != true;
-    bool hasOlderErrorHandler = errorHandler?.GetParsedVersion() is not null && log?.ApiVersionParsed is not null && log.ApiVersionParsed.IsNewerThan(errorHandler.GetParsedVersion());
-    bool isPyTkCompatibilityMode = log?.ApiVersionParsed?.IsOlderThan("3.15.0") is false && log.Mods.Any(p => p.IsCodeMod && p.Name == "PyTK" && p.GetParsedVersion()?.IsOlderThan("1.24.0") is true);
+    bool errorHandlerNeeded = log?.ApiVersionParsed?.IsOlderThan("4.0.0-alpha") == true && log.OperatingSystem?.Contains("Android Unix", StringComparison.OrdinalIgnoreCase) != true;
+    bool missingErrorHandler = errorHandlerNeeded && errorHandler is null;
+    bool hasOlderErrorHandler = errorHandlerNeeded && errorHandler?.GetParsedVersion() is not null && log?.ApiVersionParsed is not null && log.ApiVersionParsed.IsNewerThan(errorHandler.GetParsedVersion());
 
     // get filters
     IDictionary<string, bool> defaultFilters = Enum
@@ -40,15 +42,15 @@
     {
         <meta name="robots" content="noindex" />
     }
-    <link rel="stylesheet" href="~/Content/css/file-upload.css" />
-    <link rel="stylesheet" href="~/Content/css/log-parser.css?r=20221009" />
+    <link rel="stylesheet" href="@Url.ContentWithCacheBust("~/Content/css/file-upload.css")" />
+    <link rel="stylesheet" href="@Url.ContentWithCacheBust("~/Content/css/log-parser.css")" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tabbyjs@12.0.3/dist/css/tabby-ui-vertical.min.css" />
 
     <script src="https://cdn.jsdelivr.net/npm/tabbyjs@12.0.3" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1" crossorigin="anonymous"></script>
-    <script src="~/Content/js/file-upload.js"></script>
-    <script src="~/Content/js/log-parser.js"></script>
+    <script src="@Url.ContentWithCacheBust("~/Content/js/file-upload.js")"></script>
+    <script src="@Url.ContentWithCacheBust("~/Content/js/log-parser.js")"></script>
 
     <script id="serializedData" type="application/json">
         @if (!Model.ShowRaw)

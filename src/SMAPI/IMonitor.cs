@@ -1,3 +1,6 @@
+using System.Runtime.CompilerServices;
+using StardewModdingAPI.Framework.Logging;
+
 namespace StardewModdingAPI
 {
     /// <summary>Encapsulates monitoring and logging for a given module.</summary>
@@ -26,5 +29,9 @@ namespace StardewModdingAPI
         /// <summary>Log a message that only appears when <see cref="IsVerbose"/> is enabled.</summary>
         /// <param name="message">The message to log.</param>
         void VerboseLog(string message);
+
+        /// <summary>Log a message that only appears when <see cref="IsVerbose"/> is enabled.</summary>
+        /// <param name="message">The message to log.</param>
+        void VerboseLog([InterpolatedStringHandlerArgument("")] ref VerboseLogStringHandler message);
     }
 }

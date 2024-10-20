@@ -22,7 +22,9 @@ using StardewModdingAPI.Web.Framework.Clients.CurseForge;
 using StardewModdingAPI.Web.Framework.Clients.GitHub;
 using StardewModdingAPI.Web.Framework.Clients.ModDrop;
 using StardewModdingAPI.Web.Framework.Clients.Nexus;
+using StardewModdingAPI.Web.Framework.Clients.UpdateManifest;
 using StardewModdingAPI.Web.Framework.ConfigModels;
+using StardewModdingAPI.Web.Framework.Metrics;
 
 namespace StardewModdingAPI.Web.Controllers
 {
@@ -63,14 +65,15 @@ namespace StardewModdingAPI.Web.Controllers
         /// <param name="github">The GitHub API client.</param>
         /// <param name="modDrop">The ModDrop API client.</param>
         /// <param name="nexus">The Nexus API client.</param>
-        public ModsApiController(IWebHostEnvironment environment, IWikiCacheRepository wikiCache, IModCacheRepository modCache, IOptions<ModUpdateCheckConfig> config, IChucklefishClient chucklefish, ICurseForgeClient curseForge, IGitHubClient github, IModDropClient modDrop, INexusClient nexus)
+        /// <param name="updateManifest">The API client for arbitrary update manifest URLs.</param>
+        public ModsApiController(IWebHostEnvironment environment, IWikiCacheRepository wikiCache, IModCacheRepository modCache, IOptions<ModUpdateCheckConfig> config, IChucklefishClient chucklefish, ICurseForgeClient curseForge, IGitHubClient github, IModDropClient modDrop, INexusClient nexus, IUpdateManifestClient updateManifest)
         {
             this.ModDatabase = new ModToolkit().GetModDatabase(Path.Combine(environment.WebRootPath, "SMAPI.metadata.json"));
 
             this.WikiCache = wikiCache;
             this.ModCache = modCache;
             this.Config = config;
-            this.ModSites = new ModSiteManager(new IModSiteClient[] { chucklefish, curseForge, github, modDrop, nexus });
+            this.ModSites = new ModSiteManager(new IModSiteClient[] { chucklefish, curseForge, github, modDrop, nexus, updateManifest });
         }
 
         /// <summary>Fetch version metadata for the given mods.</summary>
@@ -79,6 +82,9 @@ namespace StardewModdingAPI.Web.Controllers
         [HttpPost]
         public async Task<IEnumerable<ModEntryModel>> PostAsync([FromBody] ModSearchModel? model, [FromRoute] string version)
         {
+            ApiMetricsModel metrics = MetricsManager.GetMetricsForNow();
+            metrics.TrackRequest(model?.ApiVersion, model?.GameVersion);
+
             if (model?.Mods == null)
                 return Array.Empty<ModEntryModel>();
 
@@ -97,7 +103,7 @@ namespace StardewModdingAPI.Web.Controllers
                     mod.AddUpdateKeys(config.SmapiInfo.AddBetaUpdateKeys);
 
                 // fetch result
-                ModEntryModel result = await this.GetModData(mod, wikiData, model.IncludeExtendedMetadata, model.ApiVersion);
+                ModEntryModel result = await this.GetModData(mod, wikiData, model.IncludeExtendedMetadata, model.ApiVersion, metrics);
                 if (!model.IncludeExtendedMetadata && (model.ApiVersion == null || mod.InstalledVersion == null))
                 {
                     result.Errors = result.Errors
@@ -112,6 +118,13 @@ namespace StardewModdingAPI.Web.Controllers
             return mods.Values;
         }
 
+        /// <summary>Fetch a summary of update-check metrics since the server was last deployed or restarted.</summary>
+        [HttpGet("metrics")]
+        public MetricsSummary GetMetrics()
+        {
+            return MetricsManager.GetSummary(this.Config.Value);
+        }
+
 
         /*********
         ** Private methods
@@ -121,8 +134,9 @@ namespace StardewModdingAPI.Web.Controllers
         /// <param name="wikiData">The wiki data.</param>
         /// <param name="includeExtendedMetadata">Whether to include extended metadata for each mod.</param>
         /// <param name="apiVersion">The SMAPI version installed by the player.</param>
+        /// <param name="metrics">The metrics to update with update-check results.</param>
         /// <returns>Returns the mod data if found, else <c>null</c>.</returns>
-        private async Task<ModEntryModel> GetModData(ModSearchEntryModel search, WikiModEntry[] wikiData, bool includeExtendedMetadata, ISemanticVersion? apiVersion)
+        private async Task<ModEntryModel> GetModData(ModSearchEntryModel search, WikiModEntry[] wikiData, bool includeExtendedMetadata, ISemanticVersion? apiVersion, ApiMetricsModel metrics)
         {
             // cross-reference data
             ModDataRecord? record = this.ModDatabase.Get(search.ID);
@@ -152,7 +166,7 @@ namespace StardewModdingAPI.Web.Controllers
                 }
 
                 // fetch data
-                ModInfoModel data = await this.GetInfoForUpdateKeyAsync(updateKey, allowNonStandardVersions, wikiEntry?.Overrides?.ChangeRemoteVersions);
+                ModInfoModel data = await this.GetInfoForUpdateKeyAsync(updateKey, allowNonStandardVersions, wikiEntry?.Overrides?.ChangeRemoteVersions, metrics);
                 if (data.Status != RemoteModStatus.Ok)
                 {
                     errors.Add(data.Error ?? data.Status.ToString());
@@ -162,17 +176,21 @@ namespace StardewModdingAPI.Web.Controllers
                 // if there's only a prerelease version (e.g. from GitHub), don't override the main version
                 ISemanticVersion? curMain = data.Version;
                 ISemanticVersion? curPreview = data.PreviewVersion;
+                string? curMainUrl = data.MainModPageUrl;
+                string? curPreviewUrl = data.PreviewModPageUrl;
                 if (curPreview == null && curMain?.IsPrerelease() == true)
                 {
                     curPreview = curMain;
+                    curPreviewUrl = curMainUrl;
                     curMain = null;
+                    curMainUrl = null;
                 }
 
                 // handle versions
                 if (this.IsNewer(curMain, main?.Version))
-                    main = new ModEntryVersionModel(curMain, data.Url!);
+                    main = new ModEntryVersionModel(curMain, curMainUrl ?? data.Url!);
                 if (this.IsNewer(curPreview, optional?.Version))
-                    optional = new ModEntryVersionModel(curPreview, data.Url!);
+                    optional = new ModEntryVersionModel(curPreview, curPreviewUrl ?? data.Url!);
             }
 
             // get unofficial version
@@ -273,29 +291,30 @@ namespace StardewModdingAPI.Web.Controllers
         /// <param name="updateKey">The namespaced update key.</param>
         /// <param name="allowNonStandardVersions">Whether to allow non-standard versions.</param>
         /// <param name="mapRemoteVersions">The changes to apply to remote versions for update checks.</param>
-        private async Task<ModInfoModel> GetInfoForUpdateKeyAsync(UpdateKey updateKey, bool allowNonStandardVersions, ChangeDescriptor? mapRemoteVersions)
+        /// <param name="metrics">The metrics to update with update-check results.</param>
+        private async Task<ModInfoModel> GetInfoForUpdateKeyAsync(UpdateKey updateKey, bool allowNonStandardVersions, ChangeDescriptor? mapRemoteVersions, ApiMetricsModel metrics)
         {
             if (!updateKey.LooksValid)
                 return new ModInfoModel().SetError(RemoteModStatus.DoesNotExist, $"Invalid update key '{updateKey}'.");
 
             // get mod page
+            bool wasCached =
+                this.ModCache.TryGetMod(updateKey.Site, updateKey.ID, out Cached<IModPage>? cachedMod)
+                && !this.ModCache.IsStale(cachedMod.LastUpdated, cachedMod.Data.Status == RemoteModStatus.TemporaryError ? this.Config.Value.ErrorCacheMinutes : this.Config.Value.SuccessCacheMinutes);
             IModPage page;
+            if (wasCached)
+                page = cachedMod!.Data;
+            else
             {
-                bool isCached =
-                    this.ModCache.TryGetMod(updateKey.Site, updateKey.ID, out Cached<IModPage>? cachedMod)
-                    && !this.ModCache.IsStale(cachedMod.LastUpdated, cachedMod.Data.Status == RemoteModStatus.TemporaryError ? this.Config.Value.ErrorCacheMinutes : this.Config.Value.SuccessCacheMinutes);
-
-                if (isCached)
-                    page = cachedMod!.Data;
-                else
-                {
-                    page = await this.ModSites.GetModPageAsync(updateKey);
-                    this.ModCache.SaveMod(updateKey.Site, updateKey.ID, page);
-                }
+                page = await this.ModSites.GetModPageAsync(updateKey);
+                this.ModCache.SaveMod(updateKey.Site, updateKey.ID, page);
             }
 
+            // update metrics
+            metrics.TrackUpdateKey(updateKey, wasCached, page.IsValid);
+
             // get version info
-            return this.ModSites.GetPageVersions(page, updateKey.Subkey, allowNonStandardVersions, mapRemoteVersions);
+            return this.ModSites.GetPageVersions(page, updateKey, allowNonStandardVersions, mapRemoteVersions);
         }
 
         /// <summary>Get update keys based on the available mod metadata, while maintaining the precedence order.</summary>

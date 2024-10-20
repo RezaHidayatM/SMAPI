@@ -27,6 +27,12 @@ namespace StardewModdingAPI.Web.Framework
         /// <summary>The error message indicating why the mod is invalid (if applicable).</summary>
         public string? Error { get; private set; }
 
+        /// <summary>The mod page URL from which <see cref="Version"/> can be downloaded, if different from the <see cref="Url"/>.</summary>
+        public string? MainModPageUrl { get; private set; }
+
+        /// <summary>The mod page URL from which <see cref="PreviewVersion"/> can be downloaded, if different from the <see cref="Url"/>.</summary>
+        public string? PreviewModPageUrl { get; private set; }
+
 
         /*********
         ** Public methods
@@ -46,7 +52,8 @@ namespace StardewModdingAPI.Web.Framework
         {
             this
                 .SetBasicInfo(name, url)
-                .SetVersions(version!, previewVersion)
+                .SetMainVersion(version!)
+                .SetPreviewVersion(previewVersion)
                 .SetError(status, error!);
         }
 
@@ -62,14 +69,25 @@ namespace StardewModdingAPI.Web.Framework
             return this;
         }
 
-        /// <summary>Set the mod version info.</summary>
-        /// <param name="version">The semantic version for the mod's latest release.</param>
-        /// <param name="previewVersion">The semantic version for the mod's latest preview release, if available and different from <see cref="Version"/>.</param>
+        /// <summary>Set the mod's main version info.</summary>
+        /// <param name="version">The semantic version for the mod's latest stable release.</param>
+        /// <param name="modPageUrl">The mod page URL from which <paramref name="version"/> can be downloaded, if different from the <see cref="Url"/>.</param>
         [MemberNotNull(nameof(ModInfoModel.Version))]
-        public ModInfoModel SetVersions(ISemanticVersion version, ISemanticVersion? previewVersion = null)
+        public ModInfoModel SetMainVersion(ISemanticVersion version, string? modPageUrl = null)
         {
             this.Version = version;
-            this.PreviewVersion = previewVersion;
+            this.MainModPageUrl = modPageUrl;
+
+            return this;
+        }
+
+        /// <summary>Set the mod's preview version info.</summary>
+        /// <param name="version">The semantic version for the mod's latest preview release.</param>
+        /// <param name="modPageUrl">The mod page URL from which <paramref name="version"/> can be downloaded, if different from the <see cref="Url"/>.</param>
+        public ModInfoModel SetPreviewVersion(ISemanticVersion? version, string? modPageUrl = null)
+        {
+            this.PreviewVersion = version;
+            this.PreviewModPageUrl = modPageUrl;
 
             return this;
         }

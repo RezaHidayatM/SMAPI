@@ -16,9 +16,6 @@ namespace StardewModdingAPI.Mods.ConsoleCommands.Framework.Commands
         /// <summary>The command description.</summary>
         public string Description { get; }
 
-        /// <summary>Whether the command may need to perform logic when the player presses a button. This value shouldn't change.</summary>
-        public bool MayNeedInput { get; }
-
         /// <summary>Whether the command may need to perform logic when the game updates. This value shouldn't change.</summary>
         public bool MayNeedUpdate { get; }
 
@@ -48,13 +45,11 @@ namespace StardewModdingAPI.Mods.ConsoleCommands.Framework.Commands
         /// <summary>Construct an instance.</summary>
         /// <param name="name">The command name the user must type.</param>
         /// <param name="description">The command description.</param>
-        /// <param name="mayNeedInput">Whether the command may need to perform logic when the player presses a button.</param>
         /// <param name="mayNeedUpdate">Whether the command may need to perform logic when the game updates.</param>
-        protected ConsoleCommand(string name, string description, bool mayNeedInput = false, bool mayNeedUpdate = false)
+        protected ConsoleCommand(string name, string description, bool mayNeedUpdate = false)
         {
             this.Name = name;
             this.Description = description;
-            this.MayNeedInput = mayNeedInput;
             this.MayNeedUpdate = mayNeedUpdate;
         }
 

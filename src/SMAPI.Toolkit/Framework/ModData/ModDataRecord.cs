@@ -22,6 +22,9 @@ namespace StardewModdingAPI.Toolkit.Framework.ModData
         /// <summary>The mod warnings to suppress, even if they'd normally be shown.</summary>
         public ModWarning SuppressWarnings { get; }
 
+        /// <summary>Whether to ignore dependencies on this mod ID when it's not loaded.</summary>
+        public bool IgnoreDependencies { get; set; }
+
         /// <summary>The versioned field data.</summary>
         public ModDataField[] Fields { get; }
 
@@ -38,6 +41,7 @@ namespace StardewModdingAPI.Toolkit.Framework.ModData
             this.ID = model.ID;
             this.FormerIDs = model.GetFormerIDs().ToArray();
             this.SuppressWarnings = model.SuppressWarnings;
+            this.IgnoreDependencies = model.IgnoreDependencies;
             this.Fields = model.GetFields().ToArray();
         }
 

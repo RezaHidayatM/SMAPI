@@ -22,7 +22,7 @@ namespace StardewModdingAPI.Toolkit.Framework.UpdateData
         public string? Subkey { get; }
 
         /// <summary>Whether the update key seems to be valid.</summary>
-#if NET5_0_OR_GREATER
+#if NET6_0_OR_GREATER
         [MemberNotNullWhen(true, nameof(UpdateKey.ID))]
 #endif
         public bool LooksValid { get; }
@@ -58,31 +58,17 @@ namespace StardewModdingAPI.Toolkit.Framework.UpdateData
         /// <param name="raw">The raw update key to parse.</param>
         public static UpdateKey Parse(string? raw)
         {
+            if (raw is null)
+                return new UpdateKey(raw, ModSiteKey.Unknown, null, null);
             // extract site + ID
-            string? rawSite;
-            string? id;
-            {
-                string[]? parts = raw?.Trim().Split(':');
-                if (parts?.Length != 2)
-                    return new UpdateKey(raw, ModSiteKey.Unknown, null, null);
-
-                rawSite = parts[0].Trim();
-                id = parts[1].Trim();
-            }
-            if (string.IsNullOrWhiteSpace(id))
+            (string rawSite, string? id) = UpdateKey.SplitTwoParts(raw, ':');
+            if (string.IsNullOrEmpty(id))
                 id = null;
 
             // extract subkey
             string? subkey = null;
             if (id != null)
-            {
-                string[] parts = id.Split('@');
-                if (parts.Length == 2)
-                {
-                    id = parts[0].Trim();
-                    subkey = $"@{parts[1]}".Trim();
-                }
-            }
+                (id, subkey) = UpdateKey.SplitTwoParts(id, '@', true);
 
             // parse
             if (!Enum.TryParse(rawSite, true, out ModSiteKey site))
@@ -150,6 +136,24 @@ namespace StardewModdingAPI.Toolkit.Framework.UpdateData
         public static string GetString(ModSiteKey site, string? id, string? subkey = null)
         {
             return $"{site}:{id}{subkey}".Trim();
+        }
+
+
+        /*********
+        ** Private methods
+        *********/
+        /// <summary>Split a string into two parts at a delimiter and trim whitespace.</summary>
+        /// <param name="str">The string to split.</param>
+        /// <param name="delimiter">The character on which to split.</param>
+        /// <param name="keepDelimiter">Whether to include the delimiter in the second string.</param>
+        /// <returns>Returns a tuple containing the two strings, with the second value <c>null</c> if the delimiter wasn't found.</returns>
+        private static (string, string?) SplitTwoParts(string str, char delimiter, bool keepDelimiter = false)
+        {
+            int splitIndex = str.IndexOf(delimiter);
+
+            return splitIndex >= 0
+                ? (str.Substring(0, splitIndex).Trim(), str.Substring(splitIndex + (keepDelimiter ? 0 : 1)).Trim())
+                : (str.Trim(), null);
         }
     }
 }

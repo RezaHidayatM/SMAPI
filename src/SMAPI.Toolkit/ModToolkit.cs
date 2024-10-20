@@ -25,7 +25,9 @@ namespace StardewModdingAPI.Toolkit
         private readonly Dictionary<ModSiteKey, string> VendorModUrls = new()
         {
             [ModSiteKey.Chucklefish] = "https://community.playstarbound.com/resources/{0}",
+            [ModSiteKey.CurseForge] = "https://www.curseforge.com/projects/{0}",
             [ModSiteKey.GitHub] = "https://github.com/{0}/releases",
+            [ModSiteKey.ModDrop] = "https://www.moddrop.com/stardew-valley/mods/{0}",
             [ModSiteKey.Nexus] = "https://www.nexusmods.com/stardewvalley/mods/{0}"
         };
 
@@ -52,6 +54,13 @@ namespace StardewModdingAPI.Toolkit
         public IEnumerable<DirectoryInfo> GetGameFolders()
         {
             return new GameScanner().Scan();
+        }
+
+        /// <summary>Find all default Stardew Valley install folders which exist, regardless of whether they're valid.</summary>
+        /// <remarks>This checks default game locations, and on Windows checks the Windows registry for GOG/Steam install data.</remarks>
+        public IEnumerable<(DirectoryInfo, GameFolderType)> GetGameFoldersIncludingInvalid()
+        {
+            return new GameScanner().ScanIncludingInvalid();
         }
 
         /// <summary>Extract mod metadata from the wiki compatibility list.</summary>

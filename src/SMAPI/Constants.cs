@@ -6,9 +6,6 @@ using System.Reflection;
 using Mono.Cecil;
 using StardewModdingAPI.Enums;
 using StardewModdingAPI.Framework;
-#if SMAPI_DEPRECATED
-using StardewModdingAPI.Framework.Deprecations;
-#endif
 using StardewModdingAPI.Framework.ModLoading;
 using StardewModdingAPI.Toolkit.Framework;
 using StardewModdingAPI.Toolkit.Utilities;
@@ -52,7 +49,7 @@ namespace StardewModdingAPI
         internal static int? LogScreenId { get; set; }
 
         /// <summary>SMAPI's current raw semantic version.</summary>
-        internal static string RawApiVersion = "3.18.6";
+        internal static string RawApiVersion = "4.0.8";
     }
 
     /// <summary>Contains SMAPI's constants and assumptions.</summary>
@@ -68,35 +65,19 @@ namespace StardewModdingAPI
         public static ISemanticVersion ApiVersion { get; } = new Toolkit.SemanticVersion(EarlyConstants.RawApiVersion);
 
         /// <summary>The minimum supported version of Stardew Valley.</summary>
-        public static ISemanticVersion MinimumGameVersion { get; } = new GameVersion("1.5.6");
+        public static ISemanticVersion MinimumGameVersion { get; } = new GameVersion("1.6.9");
+
+        /// <summary>The minimum supported Stardew Valley build number, or <c>null</c> for any build of <see cref="MinimumGameVersion"/>.</summary>
+        public static int? MinimumGameBuild { get; } = 24292;
 
         /// <summary>The maximum supported version of Stardew Valley, if any.</summary>
-        public static ISemanticVersion? MaximumGameVersion { get; } = new GameVersion("1.5.6");
+        public static ISemanticVersion? MaximumGameVersion { get; } = null;
 
         /// <summary>The target game platform.</summary>
         public static GamePlatform TargetPlatform { get; } = EarlyConstants.Platform;
 
         /// <summary>The game framework running the game.</summary>
         public static GameFramework GameFramework { get; } = EarlyConstants.GameFramework;
-
-#if SMAPI_DEPRECATED
-        /// <summary>The path to the game folder.</summary>
-        [Obsolete($"Use {nameof(Constants)}.{nameof(GamePath)} instead. This property will be removed in SMAPI 4.0.0.")]
-        public static string ExecutionPath
-        {
-            get
-            {
-                SCore.DeprecationManager.Warn(
-                    source: null,
-                    nounPhrase: $"{nameof(Constants)}.{nameof(Constants.ExecutionPath)}",
-                    version: "3.14.0",
-                    severity: DeprecationLevel.PendingRemoval
-                );
-
-                return Constants.GamePath;
-            }
-        }
-#endif
 
         /// <summary>The path to the game folder.</summary>
         public static string GamePath { get; } = EarlyConstants.GamePath;
@@ -139,8 +120,11 @@ namespace StardewModdingAPI
         /// <summary>The file path for the SMAPI configuration file.</summary>
         internal static string ApiConfigPath => Path.Combine(Constants.InternalFilesPath, "config.json");
 
-        /// <summary>The file path for the overrides file for <see cref="ApiConfigPath"/>, which is applied over it.</summary>
+        /// <summary>The file path for the per-user <see cref="ApiConfigPath"/> override file, which is applied over it.</summary>
         internal static string ApiUserConfigPath => Path.Combine(Constants.InternalFilesPath, "config.user.json");
+
+        /// <summary>The file path for the per-mods-folder <see cref="ApiConfigPath"/> override file, which is applied over it.</summary>
+        internal static string ApiModGroupConfigPath => Path.Combine(ModsPath, "SMAPI-config.json");
 
         /// <summary>The file path for the SMAPI metadata file.</summary>
         internal static string ApiMetadataPath => Path.Combine(Constants.InternalFilesPath, "metadata.json");

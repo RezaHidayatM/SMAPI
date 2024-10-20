@@ -41,6 +41,17 @@ namespace StardewModdingAPI.Toolkit.Framework.GameScanning
         /// <remarks>This checks default game locations, and on Windows checks the Windows registry for GOG/Steam install data. A folder is considered 'valid' if it contains the Stardew Valley executable for the current OS.</remarks>
         public IEnumerable<DirectoryInfo> Scan()
         {
+            foreach ((DirectoryInfo folder, GameFolderType type) in this.ScanIncludingInvalid())
+            {
+                if (type is GameFolderType.Valid)
+                    yield return folder;
+            }
+        }
+
+        /// <summary>Find all valid Stardew Valley install folders.</summary>
+        /// <remarks>This checks default game locations, and on Windows checks the Windows registry for GOG/Steam install data. A folder is considered 'valid' if it contains the Stardew Valley executable for the current OS.</remarks>
+        public IEnumerable<(DirectoryInfo, GameFolderType)> ScanIncludingInvalid()
+        {
             // get install paths
             IEnumerable<string> paths = this
                 .GetCustomInstallPaths()
@@ -52,16 +63,9 @@ namespace StardewModdingAPI.Toolkit.Framework.GameScanning
             foreach (string path in paths)
             {
                 DirectoryInfo folder = new(path);
-                if (this.LooksLikeGameFolder(folder))
-                    yield return folder;
+                if (folder.Exists)
+                    yield return (folder, this.GetGameFolderType(folder));
             }
-        }
-
-        /// <summary>Get whether a folder seems to contain the game.</summary>
-        /// <param name="dir">The folder to check.</param>
-        public bool LooksLikeGameFolder(DirectoryInfo dir)
-        {
-            return this.GetGameFolderType(dir) == GameFolderType.Valid;
         }
 
         /// <summary>Detect the validity of a game folder based on file structure heuristics.</summary>
@@ -72,49 +76,42 @@ namespace StardewModdingAPI.Toolkit.Framework.GameScanning
             if (!dir.Exists)
                 return GameFolderType.NoGameFound;
 
+            // invalid folder
+            if (!File.Exists(Path.Combine(dir.FullName, "Stardew Valley.dll")))
+            {
+                // get executable
+                FileInfo executable = new(Path.Combine(dir.FullName, "Stardew Valley.exe"));
+                if (!executable.Exists)
+                    executable = new(Path.Combine(dir.FullName, "StardewValley.exe")); // pre-1.5.5 Linux/macOS executable
+                if (!executable.Exists)
+                    return GameFolderType.NoGameFound;
+
+                // get assembly version
+                Version? version;
+                try
+                {
+                    version = AssemblyName.GetAssemblyName(executable.FullName).Version;
+                    if (version == null)
+                        return GameFolderType.InvalidUnknown;
+                }
+                catch
+                {
+                    return GameFolderType.InvalidUnknown; // executable exists, but it doesn't seem to be a valid assembly
+                }
+
+                // legacy version that's no longer supported
+                if (version.Major < 1 || version is { Major: 1, Minor: < 6 })
+                    return GameFolderType.LegacyVersion;
+
+                // compatibility branch
+                if (!File.Exists(Path.Combine(dir.FullName, "MonoGame.Framework.dll")))
+                    return GameFolderType.LegacyCompatibilityBranch;
+
+                return GameFolderType.InvalidUnknown;
+            }
+
             // apparently valid
-            if (File.Exists(Path.Combine(dir.FullName, "Stardew Valley.dll")))
-                return GameFolderType.Valid;
-
-            // doesn't contain any version of Stardew Valley
-            FileInfo executable = new(Path.Combine(dir.FullName, "Stardew Valley.exe"));
-            if (!executable.Exists)
-                executable = new(Path.Combine(dir.FullName, "StardewValley.exe")); // pre-1.5.5 Linux/macOS executable
-            if (!executable.Exists)
-                return GameFolderType.NoGameFound;
-
-            // get assembly version
-            Version? version;
-            try
-            {
-                version = AssemblyName.GetAssemblyName(executable.FullName).Version;
-                if (version == null)
-                    return GameFolderType.InvalidUnknown;
-            }
-            catch
-            {
-                // The executable exists but it doesn't seem to be a valid assembly. This would
-                // happen with Stardew Valley 1.5.5+, but that should have been flagged as a valid
-                // folder before this point.
-                return GameFolderType.InvalidUnknown;
-            }
-
-            // ignore Stardew Valley 1.5.5+ at this point
-            if (version.Major == 1 && version.Minor == 3 && version.Build == 37)
-                return GameFolderType.InvalidUnknown;
-
-            // incompatible version
-            if (version.Major == 1 && version.Minor < 4)
-            {
-                // Stardew Valley 1.5.4 and earlier have assembly versions <= 1.3.7853.31734
-                if (version.Minor < 3 || version.Build <= 7853)
-                    return GameFolderType.Legacy154OrEarlier;
-
-                // Stardew Valley 1.5.5+ legacy compatibility branch
-                return GameFolderType.LegacyCompatibilityBranch;
-            }
-
-            return GameFolderType.InvalidUnknown;
+            return GameFolderType.Valid;
         }
 
         /*********
@@ -136,6 +133,7 @@ namespace StardewModdingAPI.Toolkit.Framework.GameScanning
                         yield return Directory.Exists($"{home}/.steam/steam/steamapps/common/Stardew Valley")
                             ? $"{home}/.steam/steam/steamapps/common/Stardew Valley"
                             : $"{home}/.local/share/Steam/steamapps/common/Stardew Valley";
+                        yield return $"{home}/.var/app/com.valvesoftware.Steam/data/Steam/steamapps/common/Stardew Valley"; // Flatpak
 
                         // macOS
                         yield return "/Applications/Stardew Valley.app/Contents/MacOS";

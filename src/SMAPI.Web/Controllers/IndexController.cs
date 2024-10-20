@@ -62,8 +62,8 @@ namespace StardewModdingAPI.Web.Controllers
 
             // render view
             IndexVersionModel stableVersionModel = stableVersion != null
-                ? new IndexVersionModel(stableVersion.Version.ToString(), stableVersion.Release.Body, stableVersion.Asset.DownloadUrl, stableVersionForDevs?.Asset.DownloadUrl)
-                : new IndexVersionModel("unknown", "", "https://github.com/Pathoschild/SMAPI/releases", null); // just in case something goes wrong
+                ? new IndexVersionModel(stableVersion.Version.ToString(), stableVersion.Release.Body, stableVersion.Release.WebUrl, stableVersion.Asset.DownloadUrl, stableVersionForDevs?.Asset.DownloadUrl)
+                : new IndexVersionModel("unknown", "", "https://github.com/Pathoschild/SMAPI/releases", "https://github.com/Pathoschild/SMAPI/releases", null); // just in case something goes wrong
 
             // render view
             var model = new IndexModel(stableVersionModel, this.SiteConfig.OtherBlurb, this.SiteConfig.SupporterList);
@@ -84,7 +84,7 @@ namespace StardewModdingAPI.Web.Controllers
         /// <summary>Get a sorted, parsed list of SMAPI downloads for the latest releases.</summary>
         private async Task<ReleaseVersion[]> GetReleaseVersionsAsync()
         {
-            return await this.Cache.GetOrCreateAsync("available-versions", async entry =>
+            ReleaseVersion[]? versions = await this.Cache.GetOrCreateAsync("available-versions", async entry =>
             {
                 entry.AbsoluteExpiration = DateTimeOffset.UtcNow.Add(this.CacheTime);
 
@@ -107,6 +107,8 @@ namespace StardewModdingAPI.Web.Controllers
                     .OrderBy(p => p.Version)
                     .ToArray();
             });
+
+            return versions!; // GetOrCreateAsync doesn't return null unless we provide null in the callback
         }
 
         /// <summary>Get a parsed list of SMAPI downloads for a release.</summary>

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Linq;
 using StardewModdingAPI.Framework.StateTracking.Comparers;
 using StardewValley;
 
@@ -13,6 +12,9 @@ namespace StardewModdingAPI.Framework.StateTracking.Snapshots
         *********/
         /// <summary>A map of tracked locations.</summary>
         private readonly Dictionary<GameLocation, LocationSnapshot> LocationsDict = new(new ObjectReferenceComparer<GameLocation>());
+
+        /// <summary>The pooled list instance for <see cref="GetMissingLocations"/>.</summary>
+        private static readonly List<GameLocation> PooledMissingLocations = new();
 
 
         /*********
@@ -36,7 +38,7 @@ namespace StardewModdingAPI.Framework.StateTracking.Snapshots
             this.LocationList.Update(watcher.IsLocationListChanged, watcher.Added, watcher.Removed);
 
             // remove missing locations
-            foreach (var key in this.LocationsDict.Keys.Where(key => !watcher.HasLocationTracker(key)).ToArray())
+            foreach (var key in this.GetMissingLocations(watcher))
                 this.LocationsDict.Remove(key);
 
             // update locations
@@ -47,6 +49,27 @@ namespace StardewModdingAPI.Framework.StateTracking.Snapshots
 
                 snapshot.Update(locationWatcher);
             }
+        }
+
+
+        /*********
+        ** Private methods
+        *********/
+        /// <summary>Get the watched locations which no longer exist in the world, if any.</summary>
+        /// <param name="watcher">The location list tracker.</param>
+        private List<GameLocation> GetMissingLocations(WorldLocationsTracker watcher)
+        {
+            List<GameLocation> list = WorldLocationsSnapshot.PooledMissingLocations;
+            if (list.Count > 0)
+                list.Clear();
+
+            foreach (GameLocation location in this.LocationsDict.Keys)
+            {
+                if (!watcher.HasLocationTracker(location))
+                    list.Add(location);
+            }
+
+            return list;
         }
     }
 }

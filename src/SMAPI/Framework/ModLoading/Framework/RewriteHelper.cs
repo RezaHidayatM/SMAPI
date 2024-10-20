@@ -98,6 +98,26 @@ namespace StardewModdingAPI.Framework.ModLoading.Framework
             return $"{type.Namespace}.{type.Name}";
         }
 
+        /// <summary>Get the resolved type for a Cecil type reference.</summary>
+        /// <param name="type">The type reference.</param>
+        public static Type? GetCSharpType(TypeReference type)
+        {
+            string typeName = RewriteHelper.GetReflectionName(type);
+            return Type.GetType(typeName, false);
+        }
+
+        /// <summary>Get the .NET reflection full name for a Cecil type reference.</summary>
+        /// <param name="type">The type reference.</param>
+        public static string GetReflectionName(TypeReference type)
+        {
+            if (!type.IsGenericInstance)
+                return $"{type.FullName},{type.Scope.Name}";
+
+            var genericInstance = (GenericInstanceType) type;
+            var genericArgs = genericInstance.GenericArguments.Select(row => "[" + RewriteHelper.GetReflectionName(row) + "]");
+            return $"{genericInstance.Namespace}.{type.Name}[{string.Join(",", genericArgs)}],{type.Scope.Name}";
+        }
+
         /// <summary>Get whether a type matches a type reference.</summary>
         /// <param name="type">The defined type.</param>
         /// <param name="reference">The type reference.</param>
@@ -171,6 +191,17 @@ namespace StardewModdingAPI.Framework.ModLoading.Framework
         public static bool LooksLikeSameType(TypeReference? typeA, TypeReference? typeB)
         {
             return RewriteHelper.TypeDefinitionComparer.Equals(typeA, typeB);
+        }
+
+        /// <summary>Get whether a type reference and definition have the same namespace and name. This does <strong>not</strong> guarantee they point to the same type due to generics.</summary>
+        /// <param name="typeReference">The type reference.</param>
+        /// <param name="typeDefinition">The type definition.</param>
+        /// <remarks>This avoids an issue where we can't compare <see cref="TypeReference.FullName"/> to <see cref="TypeReference.FullName"/> because of the different ways they handle generics (e.g. <c>List`1&lt;System.String&gt;</c> vs <c>List`1</c>).</remarks>
+        public static bool HasSameNamespaceAndName(TypeReference? typeReference, TypeDefinition? typeDefinition)
+        {
+            return
+                typeReference?.Namespace == typeDefinition?.Namespace
+                && typeReference?.Name == typeDefinition?.Name;
         }
 
         /// <summary>Get whether a method definition matches the signature expected by a method reference.</summary>

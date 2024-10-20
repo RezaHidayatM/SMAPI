@@ -39,10 +39,21 @@ namespace StardewModdingAPI.Web.Framework
         [MemberNotNullWhen(false, nameof(IModPage.Error))]
         bool IsValid { get; }
 
+        /// <summary>Whether this mod page requires update subkeys and does not allow matching downloads without them.</summary>
+        bool RequireSubkey { get; }
+
 
         /*********
         ** Methods
         *********/
+        /// <summary>Get the mod name for an update subkey, if different from the mod page name.</summary>
+        /// <param name="subkey">The update subkey.</param>
+        string? GetName(string? subkey);
+
+        /// <summary>Get the mod page URL for an update subkey, if different from the mod page it was fetched from.</summary>
+        /// <param name="subkey">The update subkey.</param>
+        string? GetUrl(string? subkey);
+
         /// <summary>Set the fetched mod info.</summary>
         /// <param name="name">The mod name.</param>
         /// <param name="version">The mod's semantic version number.</param>

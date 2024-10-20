@@ -20,6 +20,9 @@ namespace StardewModdingAPI
         /// <param name="button">The button to suppress.</param>
         void Suppress(SButton button);
 
+        /// <summary>Suppress the immediate change to a scroll wheel value.</summary>
+        void SuppressScrollWheel();
+
         /// <summary>Suppress the keybinds which are currently down.</summary>
         /// <param name="keybindList">The keybind list whose active keybinds to suppress.</param>
         void SuppressActiveKeybinds(KeybindList keybindList);

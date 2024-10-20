@@ -21,6 +21,8 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
     ///     call the new members.
     ///   </para>
     ///
+    ///   <para>Member mappings are only used in cases where the reference to the original member can't be resolved.</para>
+    ///
     ///   <para>
     ///     To auto-map members to a facade type:
     ///     <list type="bullet">
@@ -44,7 +46,8 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
     ///   <para>
     ///     When adding a facade for a type with a required constructor, you'll need a constructor on the facade type.
     ///     This should be private and will never be called (unless you want to rewrite references to the original
-    ///     constructors per the above).
+    ///     constructors per the above). You can call <see cref="RewriteHelper.ThrowFakeConstructorCalled"/> in the
+    ///     private constructor to enforce that facades aren't constructed manually.
     ///   </para>
     /// </remarks>
     internal class ReplaceReferencesRewriter : BaseInstructionHandler
@@ -87,7 +90,7 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
             return this;
         }
 
-        /// <summary>Rewrite field references to point to another field with the same field type.</summary>
+        /// <summary>Rewrite field references to point to another field with the same field type (not necessarily on the same parent).</summary>
         /// <param name="fromFullName">The full field name, like <c>Microsoft.Xna.Framework.Vector2 StardewValley.Character::Tile</c>.</param>
         /// <param name="toType">The new type which will have the field.</param>
         /// <param name="toName">The new field name to reference.</param>
@@ -99,22 +102,54 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
             if (toType is null)
                 throw new ArgumentException("Can't replace a field given a null target type.", nameof(toType));
             if (string.IsNullOrWhiteSpace(toName))
-                throw new ArgumentException("Can't replace a field given an empty target name.", nameof(toType));
+                throw new ArgumentException("Can't replace a field given an empty target name.", nameof(toName));
 
             // get field
             FieldInfo? toField;
             try
             {
                 toField = toType.GetField(toName);
-                if (toField is null)
-                    throw new InvalidOperationException($"Required field {toType.FullName}::{toName} could not be loaded.");
             }
             catch (Exception ex)
             {
                 throw new InvalidOperationException($"Required field {toType.FullName}::{toName} could not be loaded.", ex);
             }
+            if (toField is null)
+                throw new InvalidOperationException($"Required field {toType.FullName}::{toName} could not be found.");
 
             // add mapping
+            return this.MapMember(fromFullName, toField, "field");
+        }
+
+        /// <summary>Rewrite field references to point to another field with the field and parent type.</summary>
+        /// <param name="type">The type which has the old and new fields.</param>
+        /// <param name="fromName">The field name.</param>
+        /// <param name="toName">The new field name to reference.</param>
+        public ReplaceReferencesRewriter MapFieldName(Type type, string fromName, string toName)
+        {
+            // validate parameters
+            if (type is null)
+                throw new ArgumentException("Can't replace a field given a null target type.", nameof(type));
+            if (string.IsNullOrWhiteSpace(fromName))
+                throw new ArgumentException("Can't replace a field given an empty name.", nameof(fromName));
+            if (string.IsNullOrWhiteSpace(toName))
+                throw new ArgumentException("Can't replace a field given an empty target name.", nameof(toName));
+
+            // get field
+            FieldInfo? toField;
+            try
+            {
+                toField = type.GetField(toName);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Required field {type.FullName}::{toName} could not be loaded.", ex);
+            }
+            if (toField is null)
+                throw new InvalidOperationException($"Required field {type.FullName}::{toName} could not be found.");
+
+            // add mapping
+            string fromFullName = $"{this.FormatCecilType(toField.FieldType)} {this.FormatCecilType(type)}::{fromName}";
             return this.MapMember(fromFullName, toField, "field");
         }
 
@@ -137,13 +172,13 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
             try
             {
                 toProperty = toType.GetProperty(toName);
-                if (toProperty is null)
-                    throw new InvalidOperationException($"Required property {toType.FullName}::{toName} could not be loaded.");
             }
             catch (Exception ex)
             {
                 throw new InvalidOperationException($"Required property {toType.FullName}::{toName} could not be loaded.", ex);
             }
+            if (toProperty is null)
+                throw new InvalidOperationException($"Required property {toType.FullName}::{toName} could not be found.");
 
             // add mapping
             return this.MapMember(fromFullName, toProperty, "field-to-property");
@@ -168,16 +203,16 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
             MethodInfo? method;
             try
             {
-                method = parameterTypes != null
+                method = parameterTypes is not null
                     ? toType.GetMethod(toName, parameterTypes)
                     : toType.GetMethod(toName);
-                if (method is null)
-                    throw new InvalidOperationException($"Required method {toType.FullName}::{toName} could not be loaded.");
             }
             catch (Exception ex)
             {
                 throw new InvalidOperationException($"Required method {toType.FullName}::{toName} could not be loaded.", ex);
             }
+            if (method is null)
+                throw new InvalidOperationException($"Required method {toType.FullName}::{toName} could not be found.");
 
             // add mapping
             return this.MapMember(fromFullName, method, "method");
@@ -188,7 +223,11 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
         /// <typeparam name="TFacade">The facade type to which to point matching references.</typeparam>
         /// <param name="mapDefaultConstructor">If the facade has a public constructor with no parameters, whether to rewrite references to empty constructors to use that one. (This is needed because .NET has no way to distinguish between an implicit and explicit constructor.)</param>
         public ReplaceReferencesRewriter MapFacade<TFromType, TFacade>(bool mapDefaultConstructor = false)
+            where TFacade : TFromType, IRewriteFacade
         {
+            if (typeof(IRewriteFacade).IsAssignableFrom(typeof(TFromType)))
+                throw new InvalidOperationException("Can't rewrite a rewrite facade.");
+
             return this.MapFacade(typeof(TFromType).FullName!, typeof(TFacade), mapDefaultConstructor);
         }
 
@@ -205,12 +244,12 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
 
                 // add getter
                 MethodInfo? get = property.GetMethod;
-                if (get != null)
+                if (get is not null)
                     this.MapMember($"{propertyType} {fromTypeName}::get_{property.Name}()", get, "method");
 
                 // add setter
                 MethodInfo? set = property.SetMethod;
-                if (set != null)
+                if (set is not null)
                     this.MapMember($"System.Void {fromTypeName}::set_{property.Name}({propertyType})", set, "method");
 
                 // add field => property
@@ -273,10 +312,32 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
         /// <inheritdoc />
         public override bool Handle(ModuleDefinition module, ILProcessor cil, Instruction instruction)
         {
-            if (instruction.Operand is not MemberReference fromMember || !this.MemberMap.TryGetValue(fromMember.FullName, out MemberInfo? toMember))
+            if (instruction.Operand is not MemberReference fromMember)
                 return false;
 
-            switch (toMember)
+            // get target member
+            if (!this.MemberMap.TryGetValue(fromMember.FullName, out MemberInfo? mappedToMethod))
+            {
+                // If this is a generic type, there's two cases where the above might not match:
+                //   1. we mapped an open generic type like "Netcode.NetFieldBase`2::op_Implicit" without specific
+                //      generic types;
+                //   2. or due to Cecil's odd generic type handling, which can result in type names like
+                //      "Netcode.NetFieldBase`2<!0,!1>".
+                //
+                // In either case, we can check for a mapping registered using the simple generic name like
+                // "Netcode.NetFieldBase`2" (without type args) by using `GetElementType().FullName` instead.
+                if (fromMember.DeclaringType is not GenericInstanceType)
+                    return false;
+                if (!this.MemberMap.TryGetValue($"{fromMember.DeclaringType.GetElementType().FullName}::{fromMember.Name}", out mappedToMethod))
+                    return false;
+            }
+
+            // apply options
+            if (fromMember.Resolve() is not null)
+                return false;
+
+            // apply
+            switch (mappedToMethod)
             {
                 // constructor
                 case ConstructorInfo toConstructor:
@@ -285,6 +346,24 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
 
                 // method
                 case MethodInfo toMethod:
+                    // resolve generic method to a specific implementation
+                    if (toMethod.DeclaringType?.IsGenericTypeDefinition is true && fromMember.DeclaringType is GenericInstanceType generic)
+                    {
+                        Type?[] arguments = generic.GenericArguments.Select(RewriteHelper.GetCSharpType).ToArray();
+                        foreach (Type? argument in arguments)
+                        {
+                            if (argument is null)
+                                return false;
+                        }
+
+                        MethodInfo? newMethod = toMethod.DeclaringType.MakeGenericType(arguments!)?.GetMethod(toMethod.Name);
+                        if (newMethod is null)
+                            return false;
+
+                        toMethod = newMethod;
+                    }
+
+                    // rewrite
                     instruction.Operand = module.ImportReference(toMethod);
 
                     if (instruction.OpCode == OpCodes.Newobj) // rewriting constructor to static method
@@ -307,7 +386,7 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
                         else if (instruction.OpCode == OpCodes.Stfld || instruction.OpCode == OpCodes.Stsfld)
                             toPropMethod = toProperty.SetMethod;
 
-                        if (toPropMethod != null)
+                        if (toPropMethod is not null)
                         {
                             instruction.OpCode = OpCodes.Call;
                             instruction.Operand = module.ImportReference(toPropMethod);

@@ -40,6 +40,9 @@ namespace StardewModdingAPI.Web.Framework.Clients
         [MemberNotNullWhen(true, nameof(IModPage.Name), nameof(IModPage.Url))]
         public bool IsValid => this.Status == RemoteModStatus.Ok;
 
+        /// <summary>Whether this mod page requires update subkeys and does not allow matching downloads without them.</summary>
+        public bool RequireSubkey { get; set; } = false;
+
 
         /*********
         ** Public methods
@@ -78,6 +81,20 @@ namespace StardewModdingAPI.Web.Framework.Clients
             this.Error = error;
 
             return this;
+        }
+
+        /// <summary>Get the mod name for an update subkey, if different from the mod page name.</summary>
+        /// <param name="subkey">The update subkey.</param>
+        public virtual string? GetName(string? subkey)
+        {
+            return this.Name;
+        }
+
+        /// <summary>Get the mod page URL for an update subkey, if different from the mod page it was fetched from.</summary>
+        /// <param name="subkey">The update subkey.</param>
+        public virtual string? GetUrl(string? subkey)
+        {
+            return this.Url;
         }
     }
 }

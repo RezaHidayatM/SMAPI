@@ -9,10 +9,10 @@ namespace StardewModdingAPI.Toolkit.Framework.GameScanning
         /// <summary>The folder doesn't contain Stardew Valley.</summary>
         NoGameFound,
 
-        /// <summary>The folder contains Stardew Valley 1.5.4 or earlier. This version uses XNA Framework and 32-bit .NET Framework 4.5.2 on Windows and Mono on Linux/macOS, and isn't compatible with current versions of SMAPI.</summary>
-        Legacy154OrEarlier,
+        /// <summary>The folder contains Stardew Valley 1.5.6 or earlier, which isn't compatible with current versions of SMAPI.</summary>
+        LegacyVersion,
 
-        /// <summary>The folder contains Stardew Valley from the game's legacy compatibility branch, which backports newer changes to the <see cref="Legacy154OrEarlier"/> format.</summary>
+        /// <summary>The folder contains Stardew Valley from the game's legacy compatibility branch, which backports newer changes to the <see cref="LegacyVersion"/> format.</summary>
         LegacyCompatibilityBranch,
 
         /// <summary>The folder seems to contain Stardew Valley files, but they failed to load for unknown reasons (e.g. corrupted executable).</summary>

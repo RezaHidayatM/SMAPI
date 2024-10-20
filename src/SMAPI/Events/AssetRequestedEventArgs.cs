@@ -71,6 +71,7 @@ namespace StardewModdingAPI.Events
         /// <list type="bullet">
         ///   <item>The asset doesn't need to exist in the game's <c>Content</c> folder. If any mod loads the asset, the game will see it as an existing asset as if it was in that folder.</item>
         ///   <item>Each asset can logically only have one initial instance. If multiple loads apply at the same time, SMAPI will use the <paramref name="priority"/> parameter to decide what happens. If you're making changes to the existing asset instead of replacing it, you should use <see cref="Edit"/> instead to avoid those limitations and improve mod compatibility.</item>
+        ///   <item><strong>Do not return a cached instance.</strong> SMAPI takes ownership of the returned asset and may edit, resize, or dispose it as needed. Returning a cached instance may cause object-disposed errors or cache poisoning (where reloading the asset doesn't undo previously applied edits). If you need a reference to the final edited asset, use the <see cref="IContentEvents.AssetReady"/> event.</item>
         /// </list>
         /// </remarks>
         public void LoadFrom(Func<object> load, AssetLoadPriority priority, string? onBehalfOf = null)
@@ -90,13 +91,7 @@ namespace StardewModdingAPI.Events
         /// <typeparam name="TAsset">The expected data type. The main supported types are <see cref="Map"/>, <see cref="Texture2D"/>, dictionaries, and lists; other types may be supported by the game's content pipeline.</typeparam>
         /// <param name="relativePath">The relative path to the file in your mod folder.</param>
         /// <param name="priority">If there are multiple loads that apply to the same asset, the priority with which this one should be applied.</param>
-        /// <remarks>
-        /// Usage notes:
-        /// <list type="bullet">
-        ///   <item>The asset doesn't need to exist in the game's <c>Content</c> folder. If any mod loads the asset, the game will see it as an existing asset as if it was in that folder.</item>
-        ///   <item>Each asset can logically only have one initial instance. If multiple loads apply at the same time, SMAPI will raise an error and ignore all of them. If you're making changes to the existing asset instead of replacing it, you should use <see cref="Edit"/> instead to avoid those limitations and improve mod compatibility.</item>
-        /// </list>
-        /// </remarks>
+        /// <inheritdoc cref="LoadFrom" path="/remarks" />
         public void LoadFromModFile<TAsset>(string relativePath, AssetLoadPriority priority)
             where TAsset : notnull
         {

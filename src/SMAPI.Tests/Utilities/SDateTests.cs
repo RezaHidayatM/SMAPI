@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.RegularExpressions;
+using FluentAssertions;
 using NUnit.Framework;
 using StardewModdingAPI.Utilities;
 using StardewValley;
@@ -60,13 +61,18 @@ namespace SMAPI.Tests.Utilities
         [Test(Description = "Assert that the constructor sets the expected values for all valid dates.")]
         public void Constructor_SetsExpectedValues([ValueSource(nameof(SDateTests.SampleSeasonValues))] string season, [ValueSource(nameof(SDateTests.ValidDays))] int day, [Values(1, 2, 100)] int year)
         {
+            // arrange
+            Season expectedSeason = Enum.Parse<Season>(season, ignoreCase: true);
+
             // act
             SDate date = new(day, season, year);
 
             // assert
-            Assert.AreEqual(day, date.Day);
-            Assert.AreEqual(season.Trim().ToLowerInvariant(), date.Season);
-            Assert.AreEqual(year, date.Year);
+            date.Day.Should().Be(day);
+            date.Season.Should().Be(expectedSeason);
+            date.SeasonIndex.Should().Be((int)expectedSeason);
+            date.SeasonKey.Should().Be(Utility.getSeasonKey(expectedSeason));
+            date.Year.Should().Be(year);
         }
 
         [Test(Description = "Assert that the constructor throws an exception if the values are invalid.")]
@@ -81,7 +87,9 @@ namespace SMAPI.Tests.Utilities
         public void Constructor_RejectsInvalidValues(int day, string season, int year)
         {
             // act & assert
-            Assert.Throws<ArgumentException>(() => _ = new SDate(day, season, year), "Constructing the invalid date didn't throw the expected exception.");
+            FluentActions
+                .Invoking(() => _ = new SDate(day, season, year))
+                .Should().Throw<ArgumentException>();
         }
 
         /****
@@ -106,7 +114,9 @@ namespace SMAPI.Tests.Utilities
         public void FromDaysSinceStart_RejectsInvalidValues(int daysSinceStart)
         {
             // act & assert
-            Assert.Throws<ArgumentException>(() => _ = SDate.FromDaysSinceStart(daysSinceStart), "Passing the invalid number of days didn't throw the expected exception.");
+            FluentActions
+                .Invoking(() => _ = SDate.FromDaysSinceStart(daysSinceStart))
+                .Should().Throw<ArgumentException>();
         }
 
         /****
@@ -236,7 +246,9 @@ namespace SMAPI.Tests.Utilities
         public void AddDays_RejectsInvalidValues(string dateStr, int addDays)
         {
             // act & assert
-            Assert.Throws<ArithmeticException>(() => _ = this.GetDate(dateStr).AddDays(addDays), "Passing the invalid number of days didn't throw the expected exception.");
+            FluentActions
+                .Invoking(() => _ = this.GetDate(dateStr).AddDays(addDays))
+                .Should().Throw<ArithmeticException>();
         }
 
 

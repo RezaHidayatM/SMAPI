@@ -30,6 +30,9 @@ namespace StardewModdingAPI.Framework.StateTracking
         /// <summary>A lookup of registered buildings and their indoor location.</summary>
         private readonly Dictionary<Building, GameLocation?> BuildingIndoors = new(new ObjectReferenceComparer<Building>());
 
+        /// <summary>The pooled list instance for <see cref="GetLocationsWhoseBuildingsChanged"/>.</summary>
+        private static readonly List<LocationTracker> PooledLocationsWithBuildingsChanged = new();
+
 
         /*********
         ** Accessors
@@ -95,21 +98,23 @@ namespace StardewModdingAPI.Framework.StateTracking
             }
 
             // detect building changed
-            foreach (LocationTracker watcher in this.Locations.Where(p => p.BuildingsWatcher.IsChanged).ToArray())
+            foreach (LocationTracker watcher in this.GetLocationsWhoseBuildingsChanged())
             {
                 this.Remove(watcher.BuildingsWatcher.Removed);
                 this.Add(watcher.BuildingsWatcher.Added);
             }
 
             // detect building interiors changed (e.g. construction completed)
-            foreach ((Building building, GameLocation? oldIndoors) in this.BuildingIndoors.Where(p => !object.Equals(p.Key.indoors.Value, p.Value)))
+            foreach ((Building building, GameLocation? oldIndoors) in this.BuildingIndoors)
             {
                 GameLocation? newIndoors = building.indoors.Value;
+                if (object.ReferenceEquals(oldIndoors, newIndoors))
+                    continue;
 
-                if (oldIndoors != null)
-                    this.Added.Add(oldIndoors);
-                if (newIndoors != null)
-                    this.Removed.Add(newIndoors);
+                this.Remove(oldIndoors);
+                this.Add(newIndoors);
+
+                this.BuildingIndoors[building] = newIndoors;
             }
         }
 
@@ -214,8 +219,7 @@ namespace StardewModdingAPI.Framework.StateTracking
             this.LocationDict[location] = new LocationTracker(location);
 
             // add buildings
-            if (location is BuildableGameLocation buildableLocation)
-                this.Add(buildableLocation.buildings);
+            this.Add(location.buildings);
         }
 
         /// <summary>Remove the given building.</summary>
@@ -244,8 +248,7 @@ namespace StardewModdingAPI.Framework.StateTracking
                 // remove
                 this.LocationDict.Remove(location);
                 watcher.Dispose();
-                if (location is BuildableGameLocation buildableLocation)
-                    this.Remove(buildableLocation.buildings);
+                this.Remove(location.buildings);
             }
         }
 
@@ -260,6 +263,22 @@ namespace StardewModdingAPI.Framework.StateTracking
             yield return this.VolcanoLocationListWatcher;
             foreach (LocationTracker watcher in this.Locations)
                 yield return watcher;
+        }
+
+        /// <summary>Get the locations whose building list changed, if any.</summary>
+        private List<LocationTracker> GetLocationsWhoseBuildingsChanged()
+        {
+            List<LocationTracker> list = WorldLocationsTracker.PooledLocationsWithBuildingsChanged;
+            if (list.Count > 0)
+                list.Clear();
+
+            foreach (LocationTracker watcher in this.LocationDict.Values)
+            {
+                if (watcher.IsChanged)
+                    list.Add(watcher);
+            }
+
+            return list;
         }
     }
 }

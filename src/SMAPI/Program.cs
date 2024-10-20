@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -7,6 +8,7 @@ using System.Threading;
 using StardewModdingAPI.Framework;
 using StardewModdingAPI.Toolkit.Serialization.Models;
 using StardewModdingAPI.Toolkit.Utilities;
+using StardewValley;
 
 namespace StardewModdingAPI
 {
@@ -30,6 +32,7 @@ namespace StardewModdingAPI
         /// <param name="args">The command-line arguments.</param>
         public static void Main(string[] args)
         {
+            Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture; // per StardewValley.Program.Main
             Console.Title = $"SMAPI {EarlyConstants.RawApiVersion}";
 
             try
@@ -121,16 +124,22 @@ namespace StardewModdingAPI
             }
         }
 
-        /// <summary>Assert that the game version is within <see cref="Constants.MinimumGameVersion"/> and <see cref="Constants.MaximumGameVersion"/>.</summary>
+        /// <summary>Assert that the game version is within <see cref="Constants.MinimumGameVersion"/>, <see cref="Constants.MinimumGameBuild"/>, and <see cref="Constants.MaximumGameVersion"/>.</summary>
         private static void AssertGameVersion()
         {
             // min version
-            if (Constants.GameVersion.IsOlderThan(Constants.MinimumGameVersion))
+            int? minBuild = Constants.MinimumGameBuild;
+            if (Constants.GameVersion.IsOlderThan(Constants.MinimumGameVersion) || (minBuild.HasValue && Game1.versionBuildNumber < minBuild))
             {
                 ISemanticVersion? suggestedApiVersion = Constants.GetCompatibleApiVersion(Constants.GameVersion);
+
+                string errorPhrase = minBuild.HasValue && Constants.GameVersion.CompareTo(Constants.MinimumGameVersion) == 0
+                    ? $"You're running Stardew Valley {Constants.GameVersion} build {Game1.versionBuildNumber}, but the oldest supported version is build {minBuild}."
+                    : $"You're running Stardew Valley {Constants.GameVersion}, but the oldest supported version is {Constants.MinimumGameVersion}.";
+
                 Program.PrintErrorAndExit(suggestedApiVersion != null
-                    ? $"Oops! You're running Stardew Valley {Constants.GameVersion}, but the oldest supported version is {Constants.MinimumGameVersion}. You can install SMAPI {suggestedApiVersion} instead to fix this error, or update your game to the latest version."
-                    : $"Oops! You're running Stardew Valley {Constants.GameVersion}, but the oldest supported version is {Constants.MinimumGameVersion}. Please update your game before using SMAPI."
+                    ? $"Oops! {errorPhrase} You can install SMAPI {suggestedApiVersion} instead to fix this error, or update your game to the latest version."
+                    : $"Oops! {errorPhrase} Please update your game before using SMAPI."
                 );
             }
 

@@ -38,7 +38,7 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
 
             // skip if not broken
             FieldDefinition? fieldDefinition = fieldRef.Resolve();
-            if (fieldDefinition?.HasConstant == false)
+            if (fieldDefinition?.HasConstant == false && RewriteHelper.HasSameNamespaceAndName(fieldRef.DeclaringType, fieldDefinition.DeclaringType))
                 return false;
 
             // rewrite if possible
@@ -46,7 +46,8 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
             bool isRead = instruction.OpCode == OpCodes.Ldsfld || instruction.OpCode == OpCodes.Ldfld;
             return
                 this.TryRewriteToProperty(module, instruction, fieldRef, declaringType, isRead)
-                || this.TryRewriteToConstField(instruction, fieldDefinition);
+                || this.TryRewriteToConstField(instruction, fieldDefinition)
+                || this.TryRewriteToInheritedField(module, instruction, fieldRef, fieldDefinition);
         }
 
 
@@ -101,6 +102,33 @@ namespace StardewModdingAPI.Framework.ModLoading.Rewriters
             instruction.Operand = loadInstruction.Operand;
 
             this.Phrases.Add($"{field.DeclaringType.Name}.{field.Name} (field => const)");
+            return this.MarkRewritten();
+        }
+
+        /// <summary>Try rewriting the field into a matching inherited field.</summary>
+        /// <param name="module">The assembly module containing the instruction.</param>
+        /// <param name="instruction">The CIL instruction to rewrite.</param>
+        /// <param name="fieldRef">The field reference.</param>
+        /// <param name="fieldDefinition">The actual field resolved by Cecil.</param>
+        private bool TryRewriteToInheritedField(ModuleDefinition module, Instruction instruction, FieldReference fieldRef, FieldDefinition? fieldDefinition)
+        {
+            // skip if not resolvable
+            if (fieldDefinition == null)
+                return false;
+
+            // skip if no rewrite needed
+            if (RewriteHelper.HasSameNamespaceAndName(fieldRef.DeclaringType, fieldDefinition.DeclaringType))
+                return false;
+
+            // skip if static (it's less intuitive that rewriting should happen)
+            if (instruction.OpCode != OpCodes.Ldfld)
+                return false;
+
+            // rewrite reference
+            instruction.Operand = module.ImportReference(fieldDefinition);
+            fieldRef.FieldType = fieldDefinition.FieldType;
+
+            this.Phrases.Add($"{fieldRef.DeclaringType.Name}.{fieldRef.Name} -> {fieldDefinition.DeclaringType.Name}.{fieldRef.Name} (field now inherited)");
             return this.MarkRewritten();
         }
     }

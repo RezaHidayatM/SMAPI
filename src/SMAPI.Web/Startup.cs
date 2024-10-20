@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.Net;
 using Hangfire;
+using Hangfire.Console;
 using Hangfire.MemoryStorage;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -10,9 +12,15 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
+using StardewModdingAPI.Toolkit.Framework.Clients.CurseForgeExport;
+using StardewModdingAPI.Toolkit.Framework.Clients.ModDropExport;
+using StardewModdingAPI.Toolkit.Framework.Clients.NexusExport;
 using StardewModdingAPI.Toolkit.Serialization;
 using StardewModdingAPI.Web.Framework;
+using StardewModdingAPI.Web.Framework.Caching.CurseForgeExport;
+using StardewModdingAPI.Web.Framework.Caching.ModDropExport;
 using StardewModdingAPI.Web.Framework.Caching.Mods;
+using StardewModdingAPI.Web.Framework.Caching.NexusExport;
 using StardewModdingAPI.Web.Framework.Caching.Wiki;
 using StardewModdingAPI.Web.Framework.Clients.Chucklefish;
 using StardewModdingAPI.Web.Framework.Clients.CurseForge;
@@ -20,6 +28,7 @@ using StardewModdingAPI.Web.Framework.Clients.GitHub;
 using StardewModdingAPI.Web.Framework.Clients.ModDrop;
 using StardewModdingAPI.Web.Framework.Clients.Nexus;
 using StardewModdingAPI.Web.Framework.Clients.Pastebin;
+using StardewModdingAPI.Web.Framework.Clients.UpdateManifest;
 using StardewModdingAPI.Web.Framework.Compression;
 using StardewModdingAPI.Web.Framework.ConfigModels;
 using StardewModdingAPI.Web.Framework.RedirectRules;
@@ -58,11 +67,11 @@ namespace StardewModdingAPI.Web
         {
             // init basic services
             services
-                .Configure<ApiClientsConfig>(this.Configuration.GetSection("ApiClients"))
-                .Configure<BackgroundServicesConfig>(this.Configuration.GetSection("BackgroundServices"))
-                .Configure<ModCompatibilityListConfig>(this.Configuration.GetSection("ModCompatibilityList"))
-                .Configure<ModUpdateCheckConfig>(this.Configuration.GetSection("ModUpdateCheck"))
-                .Configure<SiteConfig>(this.Configuration.GetSection("Site"))
+                .Configure<ApiClientsConfig>(this.Configuration.GetRequiredSection("ApiClients"))
+                .Configure<BackgroundServicesConfig>(this.Configuration.GetRequiredSection("BackgroundServices"))
+                .Configure<ModCompatibilityListConfig>(this.Configuration.GetRequiredSection("ModCompatibilityList"))
+                .Configure<ModUpdateCheckConfig>(this.Configuration.GetRequiredSection("ModUpdateCheck"))
+                .Configure<SiteConfig>(this.Configuration.GetRequiredSection("Site"))
                 .Configure<RouteOptions>(options => options.ConstraintMap.Add("semanticVersion", typeof(VersionConstraint)))
                 .AddLogging()
                 .AddMemoryCache();
@@ -77,6 +86,9 @@ namespace StardewModdingAPI.Web
 
             // init storage
             services.AddSingleton<IModCacheRepository>(new ModCacheMemoryRepository());
+            services.AddSingleton<ICurseForgeExportCacheRepository>(new CurseForgeExportCacheMemoryRepository());
+            services.AddSingleton<IModDropExportCacheRepository>(new ModDropExportCacheMemoryRepository());
+            services.AddSingleton<INexusExportCacheRepository>(new NexusExportCacheMemoryRepository());
             services.AddSingleton<IWikiCacheRepository>(new WikiCacheMemoryRepository());
 
             // init Hangfire
@@ -87,19 +99,20 @@ namespace StardewModdingAPI.Web
                         .SetDataCompatibilityLevel(CompatibilityLevel.Version_170)
                         .UseSimpleAssemblyNameTypeSerializer()
                         .UseRecommendedSerializerSettings()
-                        .UseMemoryStorage();
+                        .UseMemoryStorage()
+                        .UseConsole();
                 });
 
             // init background service
             {
-                BackgroundServicesConfig config = this.Configuration.GetSection("BackgroundServices").Get<BackgroundServicesConfig>();
+                BackgroundServicesConfig config = this.Configuration.GetRequiredSection("BackgroundServices").Get<BackgroundServicesConfig>() ?? throw new InvalidOperationException("Can't initialize server: required 'ApiClients' config section couldn't be loaded.");
                 if (config.Enabled)
                     services.AddHostedService<BackgroundService>();
             }
 
             // init API clients
             {
-                ApiClientsConfig api = this.Configuration.GetSection("ApiClients").Get<ApiClientsConfig>();
+                ApiClientsConfig api = this.Configuration.GetRequiredSection("ApiClients").Get<ApiClientsConfig>() ?? throw new InvalidOperationException("Can't initialize server: required 'ApiClients' config section couldn't be loaded.");
                 string version = this.GetType().Assembly.GetName().Version!.ToString(3);
                 string userAgent = string.Format(api.UserAgent, version);
 
@@ -109,11 +122,25 @@ namespace StardewModdingAPI.Web
                     modPageUrlFormat: api.ChucklefishModPageUrlFormat
                 ));
 
-                services.AddSingleton<ICurseForgeClient>(new CurseForgeClient(
-                    userAgent: userAgent,
-                    apiUrl: api.CurseForgeBaseUrl,
-                    apiKey: api.CurseForgeApiKey
-                ));
+                if (!string.IsNullOrWhiteSpace(api.CurseForgeExportUrl))
+                {
+                    services.AddSingleton<ICurseForgeExportApiClient>(new CurseForgeExportApiClient(
+                        userAgent: userAgent,
+                        baseUrl: api.CurseForgeExportUrl
+                    ));
+                }
+                else
+                    services.AddSingleton<ICurseForgeExportApiClient>(new DisabledCurseForgeExportApiClient());
+
+                services.AddSingleton<ICurseForgeClient>(
+                    provider => new CurseForgeClient(
+                        userAgent: userAgent,
+                        apiUrl: api.CurseForgeBaseUrl,
+                        apiKey: api.CurseForgeApiKey,
+                        webModUrl: api.CurseForgeWebPageUrl,
+                        exportCache: provider.GetRequiredService<ICurseForgeExportCacheRepository>()
+                    )
+                );
 
                 services.AddSingleton<IGitHubClient>(new GitHubClient(
                     baseUrl: api.GitHubBaseUrl,
@@ -123,32 +150,59 @@ namespace StardewModdingAPI.Web
                     password: api.GitHubPassword
                 ));
 
-                services.AddSingleton<IModDropClient>(new ModDropClient(
-                    userAgent: userAgent,
-                    apiUrl: api.ModDropApiUrl,
-                    modUrlFormat: api.ModDropModPageUrl
-                ));
-
-                if (!string.IsNullOrWhiteSpace(api.NexusApiKey))
+                if (!string.IsNullOrWhiteSpace(api.ModDropExportUrl))
                 {
-                    services.AddSingleton<INexusClient>(new NexusClient(
-                        webUserAgent: userAgent,
-                        webBaseUrl: api.NexusBaseUrl,
-                        webModUrlFormat: api.NexusModUrlFormat,
-                        webModScrapeUrlFormat: api.NexusModScrapeUrlFormat,
-                        apiAppVersion: version,
-                        apiKey: api.NexusApiKey
+                    services.AddSingleton<IModDropExportApiClient>(new ModDropExportApiClient(
+                        userAgent: userAgent,
+                        baseUrl: api.ModDropExportUrl
                     ));
                 }
                 else
+                    services.AddSingleton<IModDropExportApiClient>(new DisabledModDropExportApiClient());
+
+                services.AddSingleton<IModDropClient>(
+                    provider => new ModDropClient(
+                        userAgent: userAgent,
+                        apiUrl: api.ModDropApiUrl,
+                        modUrlFormat: api.ModDropModPageUrl,
+                        exportCache: provider.GetRequiredService<IModDropExportCacheRepository>()
+                    )
+                );
+
+                if (!string.IsNullOrWhiteSpace(api.NexusExportUrl))
                 {
-                    services.AddSingleton<INexusClient>(new DisabledNexusClient());
+                    services.AddSingleton<INexusExportApiClient>(
+                        new NexusExportApiClient(
+                            userAgent: userAgent,
+                            baseUrl: api.NexusExportUrl
+                        )
+                    );
                 }
+                else
+                    services.AddSingleton<INexusExportApiClient>(new DisabledNexusExportApiClient());
+
+                if (!string.IsNullOrWhiteSpace(api.NexusApiKey))
+                {
+                    services.AddSingleton<INexusClient>(
+                        provider => new NexusClient(
+                            webUserAgent: userAgent,
+                            webBaseUrl: api.NexusBaseUrl,
+                            webModUrlFormat: api.NexusModUrlFormat,
+                            webModScrapeUrlFormat: api.NexusModScrapeUrlFormat,
+                            apiAppVersion: version,
+                            apiKey: api.NexusApiKey,
+                            exportCache: provider.GetRequiredService<INexusExportCacheRepository>()
+                        ));
+                }
+                else
+                    services.AddSingleton<INexusClient>(new DisabledNexusClient());
 
                 services.AddSingleton<IPastebinClient>(new PastebinClient(
                     baseUrl: api.PastebinBaseUrl,
                     userAgent: userAgent
                 ));
+
+                services.AddSingleton<IUpdateManifestClient>(new UpdateManifestClient(userAgent: userAgent));
             }
 
             // init helpers
@@ -219,12 +273,16 @@ namespace StardewModdingAPI.Web
                     [@"^/docs\.?$"] = "https://stardewvalleywiki.com/Modding:Index",
                     [@"^/help\.?$"] = "https://stardewvalleywiki.com/Modding:Help",
                     [@"^/install\.?$"] = "https://stardewvalleywiki.com/Modding:Player_Guide/Getting_Started#Install_SMAPI",
-                    [@"^/troubleshoot(.*)$"] = "https://stardewvalleywiki.com/Modding:Player_Guide/Troubleshooting$1",
+                    [@"^/troubleshoot(?:/?(.*))$"] = "https://stardewvalleywiki.com/Modding:Player_Guide/Troubleshooting#$1",
                     [@"^/xnb\.?$"] = "https://stardewvalleywiki.com/Modding:Using_XNB_mods",
+                    [@"^/reset-content\.?$"] = "https://stardewvalleywiki.com/Modding:Player_Guide/Troubleshooting#reset-content",
 
                     // GitHub docs
-                    [@"^/package(?:/?(.*))$"] = "https://github.com/Pathoschild/SMAPI/blob/develop/docs/technical/mod-package.md#$1",
-                    [@"^/release(?:/?(.*))$"] = "https://github.com/Pathoschild/SMAPI/blob/develop/docs/release-notes.md#$1",
+                    ["^/package(?:/?(.*))$"] = "https://github.com/Pathoschild/SMAPI/blob/develop/docs/technical/mod-package.md#$1",
+                    ["^/release(?:/?(.*))$"] = "https://github.com/Pathoschild/SMAPI/blob/develop/docs/release-notes.md#$1",
+
+                    // Content Patcher docs
+                    ["/cp-migrate(?:/?(.*))$"] = "https://github.com/Pathoschild/StardewMods/blob/develop/ContentPatcher/docs/author-migration-guide.md#$1",
 
                     // legacy redirects
                     [@"^/compat\.?$"] = "https://smapi.io/mods"

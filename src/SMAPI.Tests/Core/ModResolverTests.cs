@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using FluentAssertions;
 using Moq;
 using Newtonsoft.Json;
 using NUnit.Framework;
@@ -38,7 +39,7 @@ namespace SMAPI.Tests.Core
             IModMetadata[] mods = new ModResolver().ReadManifests(new ModToolkit(), rootFolder, new ModDatabase(), useCaseInsensitiveFilePaths: true).ToArray();
 
             // assert
-            Assert.AreEqual(0, mods.Length, 0, $"Expected to find zero manifests, found {mods.Length} instead.");
+            mods.Should().BeEmpty("it should match number of mods input");
 
             // cleanup
             Directory.Delete(rootFolder, recursive: true);
@@ -57,9 +58,9 @@ namespace SMAPI.Tests.Core
             IModMetadata? mod = mods.FirstOrDefault();
 
             // assert
-            Assert.AreEqual(1, mods.Length, 0, $"Expected to find one manifest, found {mods.Length} instead.");
-            Assert.AreEqual(ModMetadataStatus.Failed, mod!.Status, "The mod metadata was not marked failed.");
-            Assert.IsNotNull(mod.Error, "The mod metadata did not have an error message set.");
+            mods.Should().HaveCount(1, "it should match number of mods input");
+            mod!.Status.Should().Be(ModMetadataStatus.Failed);
+            mod.Error.Should().NotBeNull();
 
             // cleanup
             Directory.Delete(rootFolder, recursive: true);
@@ -82,6 +83,7 @@ namespace SMAPI.Tests.Core
                 [nameof(IManifest.UniqueID)] = $"{Sample.String()}.{Sample.String()}",
                 [nameof(IManifest.EntryDll)] = $"{Sample.String()}.dll",
                 [nameof(IManifest.MinimumApiVersion)] = $"{Sample.Int()}.{Sample.Int()}.{Sample.Int()}-{Sample.String()}",
+                [nameof(IManifest.MinimumGameVersion)] = $"{Sample.Int()}.{Sample.Int()}.{Sample.Int()}-{Sample.String()}",
                 [nameof(IManifest.Dependencies)] = new[] { originalDependency },
                 ["ExtraString"] = Sample.String(),
                 ["ExtraInt"] = Sample.Int()
@@ -99,29 +101,27 @@ namespace SMAPI.Tests.Core
             IModMetadata? mod = mods.FirstOrDefault();
 
             // assert
-            Assert.AreEqual(1, mods.Length, 0, "Expected to find one manifest.");
-            Assert.IsNotNull(mod, "The loaded manifest shouldn't be null.");
-            Assert.AreEqual(null, mod!.DataRecord, "The data record should be null since we didn't provide one.");
-            Assert.AreEqual(modFolder, mod.DirectoryPath, "The directory path doesn't match.");
-            Assert.AreEqual(null, mod.Error, "The error should be null since parsing should have succeeded.");
-            Assert.AreEqual(ModMetadataStatus.Found, mod.Status, "The status doesn't match.");
+            mods.Should().HaveCount(1, "it should match number of mods input");
+            mod.Should().NotBeNull();
+            mod!.DataRecord.Should().BeNull("we didn't provide one");
+            mod.DirectoryPath.Should().Be(modFolder);
+            mod.Error.Should().BeNull();
+            mod.Status.Should().Be(ModMetadataStatus.Found);
 
-            Assert.AreEqual(original[nameof(IManifest.Name)], mod.DisplayName, "The display name should use the manifest name.");
-            Assert.AreEqual(original[nameof(IManifest.Name)], mod.Manifest.Name, "The manifest's name doesn't match.");
-            Assert.AreEqual(original[nameof(IManifest.Author)], mod.Manifest.Author, "The manifest's author doesn't match.");
-            Assert.AreEqual(original[nameof(IManifest.Description)], mod.Manifest.Description, "The manifest's description doesn't match.");
-            Assert.AreEqual(original[nameof(IManifest.EntryDll)], mod.Manifest.EntryDll, "The manifest's entry DLL doesn't match.");
-            Assert.AreEqual(original[nameof(IManifest.MinimumApiVersion)], mod.Manifest.MinimumApiVersion?.ToString(), "The manifest's minimum API version doesn't match.");
-            Assert.AreEqual(original[nameof(IManifest.Version)]?.ToString(), mod.Manifest.Version?.ToString(), "The manifest's version doesn't match.");
+            mod.DisplayName.Should().Be((string)original[nameof(IManifest.Name)], mod.DisplayName);
+            mod.Manifest.Name.Should().Be((string)original[nameof(IManifest.Name)], mod.Manifest.Name);
+            mod.Manifest.ExtraFields.Should()
+                .NotBeNull()
+                .And.HaveCount(2)
+                .And.ContainKeys("ExtraString", "ExtraInt");
+            mod.Manifest.ExtraFields["ExtraString"].Should().Be(original["ExtraString"]);
+            mod.Manifest.ExtraFields["ExtraInt"].Should().Be(original["ExtraInt"]);
 
-            Assert.IsNotNull(mod.Manifest.ExtraFields, "The extra fields should not be null.");
-            Assert.AreEqual(2, mod.Manifest.ExtraFields.Count, "The extra fields should contain two values.");
-            Assert.AreEqual(original["ExtraString"], mod.Manifest.ExtraFields["ExtraString"], "The manifest's extra fields should contain an 'ExtraString' value.");
-            Assert.AreEqual(original["ExtraInt"], mod.Manifest.ExtraFields["ExtraInt"], "The manifest's extra fields should contain an 'ExtraInt' value.");
-
-            Assert.IsNotNull(mod.Manifest.Dependencies, "The dependencies field should not be null.");
-            Assert.AreEqual(1, mod.Manifest.Dependencies.Length, "The dependencies field should contain one value.");
-            Assert.AreEqual(originalDependency[nameof(IManifestDependency.UniqueID)], mod.Manifest.Dependencies[0].UniqueID, "The first dependency's unique ID doesn't match.");
+            mod.Manifest.Dependencies.Should()
+                .NotBeNull()
+                .And.HaveCount(1);
+            mod.Manifest.Dependencies[0].Should().NotBeNull();
+            mod.Manifest.Dependencies[0].UniqueID.Should().Be((string)originalDependency[nameof(IManifestDependency.UniqueID)]);
 
             // cleanup
             Directory.Delete(rootFolder, recursive: true);
@@ -133,7 +133,7 @@ namespace SMAPI.Tests.Core
         [Test(Description = "Assert that validation doesn't fail if there are no mods installed.")]
         public void ValidateManifests_NoMods_DoesNothing()
         {
-            new ModResolver().ValidateManifests(Array.Empty<ModMetadata>(), apiVersion: new SemanticVersion("1.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
+            new ModResolver().ValidateManifests(Array.Empty<ModMetadata>(), apiVersion: new SemanticVersion("1.0.0"), gameVersion: new SemanticVersion("1.0.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
         }
 
         [Test(Description = "Assert that validation skips manifests that have already failed without calling any other properties.")]
@@ -144,7 +144,7 @@ namespace SMAPI.Tests.Core
             mock.Setup(p => p.Status).Returns(ModMetadataStatus.Failed);
 
             // act
-            new ModResolver().ValidateManifests(new[] { mock.Object }, apiVersion: new SemanticVersion("1.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
+            new ModResolver().ValidateManifests(new[] { mock.Object }, apiVersion: new SemanticVersion("1.0.0"), gameVersion: new SemanticVersion("1.0.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
 
             // assert
             mock.VerifyGet(p => p.Status, Times.Once, "The validation did not check the manifest status.");
@@ -161,7 +161,7 @@ namespace SMAPI.Tests.Core
             });
 
             // act
-            new ModResolver().ValidateManifests(new[] { mock.Object }, apiVersion: new SemanticVersion("1.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
+            new ModResolver().ValidateManifests(new[] { mock.Object }, apiVersion: new SemanticVersion("1.0.0"), gameVersion: new SemanticVersion("1.0.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
 
             // assert
             mock.Verify(p => p.SetStatus(ModMetadataStatus.Failed, It.IsAny<ModFailReason>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once, "The validation did not fail the metadata.");
@@ -175,7 +175,21 @@ namespace SMAPI.Tests.Core
             mock.Setup(p => p.Manifest).Returns(this.GetManifest(minimumApiVersion: "1.1"));
 
             // act
-            new ModResolver().ValidateManifests(new[] { mock.Object }, apiVersion: new SemanticVersion("1.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
+            new ModResolver().ValidateManifests(new[] { mock.Object }, apiVersion: new SemanticVersion("1.0.0"), gameVersion: new SemanticVersion("1.0.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
+
+            // assert
+            mock.Verify(p => p.SetStatus(ModMetadataStatus.Failed, It.IsAny<ModFailReason>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once, "The validation did not fail the metadata.");
+        }
+
+        [Test(Description = "Assert that validation fails when the minimum game version is higher than the current Stardew Valley version.")]
+        public void ValidateManifests_MinimumGameVersion_Fails()
+        {
+            // arrange
+            Mock<IModMetadata> mock = this.GetMetadata("Mod A", Array.Empty<string>(), allowStatusChange: true);
+            mock.Setup(p => p.Manifest).Returns(this.GetManifest(minimumGameVersion: "1.6.9"));
+
+            // act
+            new ModResolver().ValidateManifests(new[] { mock.Object }, apiVersion: new SemanticVersion("1.0.0"), gameVersion: new SemanticVersion("1.0.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
 
             // assert
             mock.Verify(p => p.SetStatus(ModMetadataStatus.Failed, It.IsAny<ModFailReason>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once, "The validation did not fail the metadata.");
@@ -190,7 +204,7 @@ namespace SMAPI.Tests.Core
             Directory.CreateDirectory(directoryPath);
 
             // act
-            new ModResolver().ValidateManifests(new[] { mock.Object }, apiVersion: new SemanticVersion("1.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup);
+            new ModResolver().ValidateManifests(new[] { mock.Object }, apiVersion: new SemanticVersion("1.0.0"), gameVersion: new SemanticVersion("1.0.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup);
 
             // assert
             mock.Verify(p => p.SetStatus(ModMetadataStatus.Failed, It.IsAny<ModFailReason>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once, "The validation did not fail the metadata.");
@@ -207,7 +221,7 @@ namespace SMAPI.Tests.Core
             Mock<IModMetadata> modB = this.GetMetadata(this.GetManifest(id: "Mod A", name: "Mod B", version: "1.0"), allowStatusChange: true);
 
             // act
-            new ModResolver().ValidateManifests(new[] { modA.Object, modB.Object }, apiVersion: new SemanticVersion("1.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
+            new ModResolver().ValidateManifests(new[] { modA.Object, modB.Object }, apiVersion: new SemanticVersion("1.0.0"), gameVersion: new SemanticVersion("1.0.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup, validateFilesExist: false);
 
             // assert
             modA.Verify(p => p.SetStatus(ModMetadataStatus.Failed, ModFailReason.Duplicate, It.IsAny<string>(), It.IsAny<string>()), Times.AtLeastOnce, "The validation did not fail the first mod with a unique ID.");
@@ -233,7 +247,7 @@ namespace SMAPI.Tests.Core
             mock.Setup(p => p.DirectoryPath).Returns(modFolder);
 
             // act
-            new ModResolver().ValidateManifests(new[] { mock.Object }, apiVersion: new SemanticVersion("1.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup);
+            new ModResolver().ValidateManifests(new[] { mock.Object }, apiVersion: new SemanticVersion("1.0.0"), gameVersion: new SemanticVersion("1.0.0"), getUpdateUrl: _ => null, getFileLookup: this.GetFileLookup);
 
             // assert
             // if Moq doesn't throw a method-not-setup exception, the validation didn't override the status.
@@ -252,7 +266,7 @@ namespace SMAPI.Tests.Core
             IModMetadata[] mods = new ModResolver().ProcessDependencies(Array.Empty<IModMetadata>(), new ModDatabase()).ToArray();
 
             // assert
-            Assert.AreEqual(0, mods.Length, 0, "Expected to get an empty list of mods.");
+            mods.Should().BeEmpty("it should match number of mods input");
         }
 
         [Test(Description = "Assert that processing dependencies doesn't change the order if there are no mod dependencies.")]
@@ -268,10 +282,10 @@ namespace SMAPI.Tests.Core
             IModMetadata[] mods = new ModResolver().ProcessDependencies(new[] { modA.Object, modB.Object, modC.Object }, new ModDatabase()).ToArray();
 
             // assert
-            Assert.AreEqual(3, mods.Length, 0, "Expected to get the same number of mods input.");
-            Assert.AreSame(modA.Object, mods[0], "The load order unexpectedly changed with no dependencies.");
-            Assert.AreSame(modB.Object, mods[1], "The load order unexpectedly changed with no dependencies.");
-            Assert.AreSame(modC.Object, mods[2], "The load order unexpectedly changed with no dependencies.");
+            mods.Should().HaveCount(3, "it should match number of mods input");
+            mods[0].Should().BeSameAs(modA.Object, "the load order shouldn't change with no dependencies");
+            mods[1].Should().BeSameAs(modB.Object, "the load order shouldn't change with no dependencies");
+            mods[2].Should().BeSameAs(modC.Object, "the load order shouldn't change with no dependencies");
         }
 
         [Test(Description = "Assert that processing dependencies skips mods that have already failed without calling any other properties.")]
@@ -304,10 +318,10 @@ namespace SMAPI.Tests.Core
             IModMetadata[] mods = new ModResolver().ProcessDependencies(new[] { modC.Object, modA.Object, modB.Object }, new ModDatabase()).ToArray();
 
             // assert
-            Assert.AreEqual(3, mods.Length, 0, "Expected to get the same number of mods input.");
-            Assert.AreSame(modA.Object, mods[0], "The load order is incorrect: mod A should be first since the other mods depend on it.");
-            Assert.AreSame(modB.Object, mods[1], "The load order is incorrect: mod B should be second since it needs mod A, and is needed by mod C.");
-            Assert.AreSame(modC.Object, mods[2], "The load order is incorrect: mod C should be third since it needs both mod A and mod B.");
+            mods.Should().HaveCount(3, "it should match number of mods input");
+            mods[0].Should().BeSameAs(modA.Object, "mod A should be first since the other mods depend on it");
+            mods[1].Should().BeSameAs(modB.Object, "mod B should be second since it needs mod A, and is needed by mod C");
+            mods[2].Should().BeSameAs(modC.Object, "mod C should be third since it needs both mod A and mod B");
         }
 
         [Test(Description = "Assert that simple dependency chains are reordered correctly.")]
@@ -324,11 +338,11 @@ namespace SMAPI.Tests.Core
             IModMetadata[] mods = new ModResolver().ProcessDependencies(new[] { modC.Object, modA.Object, modB.Object, modD.Object }, new ModDatabase()).ToArray();
 
             // assert
-            Assert.AreEqual(4, mods.Length, 0, "Expected to get the same number of mods input.");
-            Assert.AreSame(modA.Object, mods[0], "The load order is incorrect: mod A should be first since it's needed by mod B.");
-            Assert.AreSame(modB.Object, mods[1], "The load order is incorrect: mod B should be second since it needs mod A, and is needed by mod C.");
-            Assert.AreSame(modC.Object, mods[2], "The load order is incorrect: mod C should be third since it needs mod B, and is needed by mod D.");
-            Assert.AreSame(modD.Object, mods[3], "The load order is incorrect: mod D should be fourth since it needs mod C.");
+            mods.Should().HaveCount(4, "it should match number of mods input");
+            mods[0].Should().BeSameAs(modA.Object, "mod A should be first since it's needed by mod B");
+            mods[1].Should().BeSameAs(modB.Object, "mod B should be second since it needs mod A, and is needed by mod C");
+            mods[2].Should().BeSameAs(modC.Object, "mod C should be third since it needs mod B, and is needed by mod D");
+            mods[3].Should().BeSameAs(modD.Object, "mod D should be fourth since it needs mod C");
         }
 
         [Test(Description = "Assert that overlapping dependency chains are reordered correctly.")]
@@ -350,13 +364,13 @@ namespace SMAPI.Tests.Core
             IModMetadata[] mods = new ModResolver().ProcessDependencies(new[] { modC.Object, modA.Object, modB.Object, modD.Object, modF.Object, modE.Object }, new ModDatabase()).ToArray();
 
             // assert
-            Assert.AreEqual(6, mods.Length, 0, "Expected to get the same number of mods input.");
-            Assert.AreSame(modA.Object, mods[0], "The load order is incorrect: mod A should be first since it's needed by mod B.");
-            Assert.AreSame(modB.Object, mods[1], "The load order is incorrect: mod B should be second since it needs mod A, and is needed by mod C.");
-            Assert.AreSame(modC.Object, mods[2], "The load order is incorrect: mod C should be third since it needs mod B, and is needed by mod D.");
-            Assert.AreSame(modD.Object, mods[3], "The load order is incorrect: mod D should be fourth since it needs mod C.");
-            Assert.AreSame(modE.Object, mods[4], "The load order is incorrect: mod E should be fifth since it needs mod B, but is specified after C which also needs mod B.");
-            Assert.AreSame(modF.Object, mods[5], "The load order is incorrect: mod F should be last since it needs mods E and C.");
+            mods.Should().HaveCount(6, "it should match number of mods input");
+            mods[0].Should().BeSameAs(modA.Object, "mod A should be first since it's needed by mod B");
+            mods[1].Should().BeSameAs(modB.Object, "mod B should be second since it needs mod A, and is needed by mod C");
+            mods[2].Should().BeSameAs(modC.Object, "mod C should be third since it needs mod B, and is needed by mod D");
+            mods[3].Should().BeSameAs(modD.Object, "mod D should be fourth since it needs mod C");
+            mods[4].Should().BeSameAs(modE.Object, "mod E should be fifth since it needs mod B, but is specified after C which also needs mod B");
+            mods[5].Should().BeSameAs(modF.Object, "mod F should be last since it needs mods E and C");
         }
 
         [Test(Description = "Assert that mods with circular dependency chains are skipped, but any other mods are loaded in the correct order.")]
@@ -377,9 +391,9 @@ namespace SMAPI.Tests.Core
             IModMetadata[] mods = new ModResolver().ProcessDependencies(new[] { modC.Object, modA.Object, modB.Object, modD.Object, modE.Object }, new ModDatabase()).ToArray();
 
             // assert
-            Assert.AreEqual(5, mods.Length, 0, "Expected to get the same number of mods input.");
-            Assert.AreSame(modA.Object, mods[0], "The load order is incorrect: mod A should be first since it's needed by mod B.");
-            Assert.AreSame(modB.Object, mods[1], "The load order is incorrect: mod B should be second since it needs mod A.");
+            mods.Should().HaveCount(5, "it should match number of mods input");
+            mods[0].Should().BeSameAs(modA.Object, "mod A should be first since it's needed by mod B");
+            mods[1].Should().BeSameAs(modB.Object, "mod B should be second since it needs mod A");
             modC.Verify(p => p.SetStatus(ModMetadataStatus.Failed, It.IsAny<ModFailReason>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once, "Mod C was expected to fail since it's part of a dependency loop.");
             modD.Verify(p => p.SetStatus(ModMetadataStatus.Failed, It.IsAny<ModFailReason>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once, "Mod D was expected to fail since it's part of a dependency loop.");
             modE.Verify(p => p.SetStatus(ModMetadataStatus.Failed, It.IsAny<ModFailReason>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once, "Mod E was expected to fail since it's part of a dependency loop.");
@@ -394,18 +408,18 @@ namespace SMAPI.Tests.Core
             Mock<IModMetadata> modB = this.GetMetadata("Mod B", dependencies: new[] { "Mod A" });
             Mock<IModMetadata> modC = this.GetMetadata("Mod C", dependencies: new[] { "Mod B" }, allowStatusChange: true);
             Mock<IModMetadata> modD = new(MockBehavior.Strict);
-            modD.Setup(p => p.Manifest).Returns<IManifest>(null);
+            modD.Setup(p => p.Manifest).Returns<IManifest>(null!); // deliberately testing null handling
             modD.Setup(p => p.Status).Returns(ModMetadataStatus.Failed);
 
             // act
             IModMetadata[] mods = new ModResolver().ProcessDependencies(new[] { modC.Object, modA.Object, modB.Object, modD.Object }, new ModDatabase()).ToArray();
 
             // assert
-            Assert.AreEqual(4, mods.Length, 0, "Expected to get the same number of mods input.");
-            Assert.AreSame(modD.Object, mods[0], "The load order is incorrect: mod D should be first since it was already failed.");
-            Assert.AreSame(modA.Object, mods[1], "The load order is incorrect: mod A should be second since it's needed by mod B.");
-            Assert.AreSame(modB.Object, mods[2], "The load order is incorrect: mod B should be third since it needs mod A, and is needed by mod C.");
-            Assert.AreSame(modC.Object, mods[3], "The load order is incorrect: mod C should be fourth since it needs mod B, and is needed by mod D.");
+            mods.Should().HaveCount(4, "it should match number of mods input");
+            mods[0].Should().BeSameAs(modD.Object, "mod D should be first since it was already failed");
+            mods[1].Should().BeSameAs(modA.Object, "mod A should be second since it's needed by mod B");
+            mods[2].Should().BeSameAs(modB.Object, "mod B should be third since it needs mod A, and is needed by mod C");
+            mods[3].Should().BeSameAs(modC.Object, "mod C should be fourth since it needs mod B, and is needed by mod D");
         }
 
         [Test(Description = "Assert that dependencies are failed if they don't meet the minimum version.")]
@@ -420,7 +434,7 @@ namespace SMAPI.Tests.Core
             IModMetadata[] mods = new ModResolver().ProcessDependencies(new[] { modA.Object, modB.Object }, new ModDatabase()).ToArray();
 
             // assert
-            Assert.AreEqual(2, mods.Length, 0, "Expected to get the same number of mods input.");
+            mods.Should().HaveCount(2, "it should match number of mods input");
             modB.Verify(p => p.SetStatus(ModMetadataStatus.Failed, It.IsAny<ModFailReason>(), It.IsAny<string>(), It.IsAny<string>()), Times.Once, "Mod B unexpectedly didn't fail even though it needs a newer version of Mod A.");
         }
 
@@ -436,9 +450,9 @@ namespace SMAPI.Tests.Core
             IModMetadata[] mods = new ModResolver().ProcessDependencies(new[] { modA.Object, modB.Object }, new ModDatabase()).ToArray();
 
             // assert
-            Assert.AreEqual(2, mods.Length, 0, "Expected to get the same number of mods input.");
-            Assert.AreSame(modA.Object, mods[0], "The load order is incorrect: mod A should be first since it's needed by mod B.");
-            Assert.AreSame(modB.Object, mods[1], "The load order is incorrect: mod B should be second since it needs mod A.");
+            mods.Should().HaveCount(2, "it should match number of mods input");
+            mods[0].Should().BeSameAs(modA.Object, "mod A should be first since it's needed by mod B");
+            mods[1].Should().BeSameAs(modB.Object, "mod B should be second since it needs mod A");
         }
 
         [Test(Description = "Assert that optional dependencies are sorted correctly if present.")]
@@ -453,9 +467,9 @@ namespace SMAPI.Tests.Core
             IModMetadata[] mods = new ModResolver().ProcessDependencies(new[] { modB.Object, modA.Object }, new ModDatabase()).ToArray();
 
             // assert
-            Assert.AreEqual(2, mods.Length, 0, "Expected to get the same number of mods input.");
-            Assert.AreSame(modA.Object, mods[0], "The load order is incorrect: mod A should be first since it's needed by mod B.");
-            Assert.AreSame(modB.Object, mods[1], "The load order is incorrect: mod B should be second since it needs mod A.");
+            mods.Should().HaveCount(2, "it should match number of mods input");
+            mods[0].Should().BeSameAs(modA.Object, "mod A should be first since it's needed by mod B");
+            mods[1].Should().BeSameAs(modB.Object, "mod B should be second since it needs mod A");
         }
 
         [Test(Description = "Assert that optional dependencies are accepted if they're missing.")]
@@ -469,8 +483,8 @@ namespace SMAPI.Tests.Core
             IModMetadata[] mods = new ModResolver().ProcessDependencies(new[] { modB.Object }, new ModDatabase()).ToArray();
 
             // assert
-            Assert.AreEqual(1, mods.Length, 0, "Expected to get the same number of mods input.");
-            Assert.AreSame(modB.Object, mods[0], "The load order is incorrect: mod B should be first since it's the only mod.");
+            mods.Should().HaveCount(1, "should match number of mods input");
+            mods[0].Should().BeSameAs(modB.Object, "mod B should be first since it's the only mod");
         }
 
 
@@ -497,8 +511,9 @@ namespace SMAPI.Tests.Core
         /// <param name="entryDll">The <see cref="IManifest.EntryDll"/> value, or <c>null</c> for a generated value.</param>
         /// <param name="contentPackForID">The <see cref="IManifest.ContentPackFor"/> value.</param>
         /// <param name="minimumApiVersion">The <see cref="IManifest.MinimumApiVersion"/> value.</param>
+        /// <param name="minimumGameVersion">The <see cref="IManifest.MinimumGameVersion"/> value.</param>
         /// <param name="dependencies">The <see cref="IManifest.Dependencies"/> value.</param>
-        private Manifest GetManifest(string? id = null, string? name = null, string? version = null, string? entryDll = null, string? contentPackForID = null, string? minimumApiVersion = null, IManifestDependency[]? dependencies = null)
+        private Manifest GetManifest(string? id = null, string? name = null, string? version = null, string? entryDll = null, string? contentPackForID = null, string? minimumApiVersion = null, string? minimumGameVersion = null, IManifestDependency[]? dependencies = null)
         {
             return new Manifest(
                 uniqueId: id ?? $"{Sample.String()}.{Sample.String()}",
@@ -509,7 +524,9 @@ namespace SMAPI.Tests.Core
                 entryDll: entryDll ?? $"{Sample.String()}.dll",
                 contentPackFor: contentPackForID != null ? new ManifestContentPackFor(contentPackForID, null) : null,
                 minimumApiVersion: minimumApiVersion != null ? new SemanticVersion(minimumApiVersion) : null,
+                minimumGameVersion: minimumGameVersion != null ? new SemanticVersion(minimumGameVersion) : null,
                 dependencies: dependencies ?? Array.Empty<IManifestDependency>(),
+                privateAssemblies: Array.Empty<IManifestPrivateAssembly>(),
                 updateKeys: Array.Empty<string>()
             );
         }
@@ -561,7 +578,7 @@ namespace SMAPI.Tests.Core
         /// <summary>Generate a default mod data record.</summary>
         private ModDataRecord GetModDataRecord()
         {
-            return new("Default Display Name", new ModDataModel("Sample ID", null, ModWarning.None));
+            return new("Default Display Name", new ModDataModel("Sample ID", null, ModWarning.None, false));
         }
 
         /// <summary>Generate a default mod data versioned fields instance.</summary>

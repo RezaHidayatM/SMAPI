@@ -12,6 +12,9 @@ namespace StardewModdingAPI.Web.Framework
         /// <summary>The mod does not exist.</summary>
         DoesNotExist,
 
+        /// <summary>The mod page exists, but it requires a subkey and none was provided.</summary>
+        RequiredSubkeyMissing,
+
         /// <summary>The mod was temporarily unavailable (e.g. the site could not be reached or an unknown error occurred).</summary>
         TemporaryError
     }

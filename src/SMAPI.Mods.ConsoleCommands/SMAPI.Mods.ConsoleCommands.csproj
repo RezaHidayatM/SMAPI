@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>ConsoleCommands</AssemblyName>
     <RootNamespace>StardewModdingAPI.Mods.ConsoleCommands</RootNamespace>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
 
@@ -22,6 +22,4 @@
   <ItemGroup>
     <None Update="manifest.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-
-  <Import Project="..\SMAPI.Internal\SMAPI.Internal.projitems" Label="Shared" />
 </Project>
